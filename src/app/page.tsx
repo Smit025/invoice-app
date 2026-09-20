@@ -1,4 +1,5 @@
 import { LandingPage } from "@/components/landing/LandingPage";
+import { PRICING } from "@/lib/constants";
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -11,7 +12,7 @@ const jsonLd = {
   offers: {
     "@type": "AggregateOffer",
     lowPrice: "0",
-    highPrice: "48",
+    highPrice: String(PRICING.oneTime),
     priceCurrency: "USD",
   },
 };

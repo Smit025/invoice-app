@@ -28,7 +28,7 @@ describe("getPublicCheckoutUrl", () => {
     expect(getPublicCheckoutUrl("monthly", env)).toBeUndefined();
   });
 
-  it("defaults to the public $48 Lemon buy URL when the env var is unset", () => {
+  it("defaults to the public $7.99 Lemon buy URL when the env var is unset", () => {
     delete process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL;
     delete process.env.NEXT_PUBLIC_CHECKOUT_URL;
     expect(getLemonPublicConfig().oneTimeUrl).toBe(DEFAULT_LEMONSQUEEZY_CHECKOUT_URL);

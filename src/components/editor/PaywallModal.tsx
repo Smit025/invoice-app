@@ -22,7 +22,7 @@ const COPY: Record<string, { title: string; body: string }> = {
   },
   pdf: {
     title: "Enjoying InvoiceMaker?",
-    body: "Pro removes the watermark and adds logo + draft history — $48 one-time.",
+    body: `Pro removes the watermark and adds logo + draft history — $${PRICING.oneTime} once, or $${PRICING.monthly}/mo.`,
   },
   pricing: {
     title: "Upgrade to Pro",
@@ -63,7 +63,7 @@ export function PaywallModal() {
 
       <div className="mt-4 rounded-lg bg-surface p-3">
         <p className="text-sm font-semibold">${PRICING.oneTime} one-time</p>
-        <p className="text-sm text-muted">USD · own Pro on this device</p>
+        <p className="text-sm text-muted">or ${PRICING.monthly}/mo · USD</p>
       </div>
 
       <div className="mt-4">
