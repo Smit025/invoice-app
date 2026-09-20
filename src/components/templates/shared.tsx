@@ -37,13 +37,32 @@ export function PartyBlock({
   );
 }
 
-export function StatusBadge({ invoice }: { invoice: Invoice }) {
+export function StatusBadge({
+  invoice,
+  inverse = false,
+}: {
+  invoice: Invoice;
+  inverse?: boolean;
+}) {
   const status = dueStatus(invoice);
   if (!status) return null;
+  const label = status === "overdue" ? "Overdue" : "Due";
+  if (inverse) {
+    return (
+      <span
+        className={cn(
+          "inline-flex h-6 items-center rounded-full border px-2.5 text-xs font-medium text-[#ffffff]",
+          status === "overdue"
+            ? "border-[#ffffff]/80 bg-[#ffffff]/20"
+            : "border-[#ffffff]/55 bg-transparent",
+        )}
+      >
+        {label}
+      </span>
+    );
+  }
   return (
-    <Badge tone={status === "overdue" ? "danger" : "muted"}>
-      {status === "overdue" ? "Overdue" : "Due"}
-    </Badge>
+    <Badge tone={status === "overdue" ? "danger" : "muted"}>{label}</Badge>
   );
 }
 
@@ -166,7 +185,7 @@ export function Meta({ invoice, align = "right" }: { invoice: Invoice; align?: "
   return (
     <dl className={cn("space-y-1 text-[12px] leading-4", align === "right" && "text-right")}>
       <div>
-        <dt className="section-label">Invoice</dt>
+        <dt className="sr-only">Invoice number</dt>
         <dd className="font-medium">{invoice.number || "—"}</dd>
       </div>
       <div>

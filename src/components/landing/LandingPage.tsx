@@ -177,10 +177,9 @@ export function LandingPage() {
                 </p>
                 <p className="text-sm text-muted">one-time, or ${PRICING.monthly}/mo</p>
                 <ul className="mt-4 space-y-2 text-sm leading-5 text-muted">
-                  <li>No watermark</li>
+                  <li>No watermark on preview or PDF</li>
                   <li>Logo on every invoice</li>
                   <li>Unlimited local drafts</li>
-                  <li>VAT, sales tax, and GST</li>
                 </ul>
                 <Link href="/app?upgrade=1" className="mt-6 inline-block">
                   <Button>Go Pro</Button>

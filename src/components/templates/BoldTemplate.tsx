@@ -22,7 +22,7 @@ export function BoldTemplate({
         </div>
         <div className="text-right">
           <p className="text-lg font-semibold">{invoice.number || "—"}</p>
-          <StatusBadge invoice={invoice} />
+          <StatusBadge invoice={invoice} inverse />
         </div>
       </div>
 
