@@ -21,11 +21,8 @@ export const LOCALES: Array<{ code: "en-US" | "en-GB"; label: string }> = [
 export const GST_RATES = [0, 5, 12, 18, 28] as const;
 
 export const PRICING = {
-  oneTime: 7.99,
-  oneTimeAnchor: 9.99,
+  oneTime: 48,
   monthly: 2.99,
-  inrOneTime: 299,
-  inrMonthly: 99,
 } as const;
 
 export const TEMPLATES: Array<{

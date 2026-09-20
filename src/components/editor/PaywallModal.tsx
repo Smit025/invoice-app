@@ -22,7 +22,7 @@ const COPY: Record<string, { title: string; body: string }> = {
   },
   pdf: {
     title: "Enjoying InvoiceMaker?",
-    body: "Pro removes the watermark and adds logo + draft history — $7.99 once, or $2.99/mo.",
+    body: "Pro removes the watermark and adds logo + draft history — $48 one-time.",
   },
   pricing: {
     title: "Upgrade to Pro",
@@ -62,14 +62,8 @@ export function PaywallModal() {
       </div>
 
       <div className="mt-4 rounded-lg bg-surface p-3">
-        <p className="text-sm font-semibold">
-          ${PRICING.oneTime} one-time{" "}
-          <span className="font-normal text-muted line-through">${PRICING.oneTimeAnchor}</span>
-        </p>
-        <p className="text-sm text-muted">or ${PRICING.monthly}/mo · USD</p>
-        <p className="mt-1 text-xs text-muted">
-          India: ₹{PRICING.inrOneTime} or ₹{PRICING.inrMonthly}/mo
-        </p>
+        <p className="text-sm font-semibold">${PRICING.oneTime} one-time</p>
+        <p className="text-sm text-muted">USD · own Pro on this device</p>
       </div>
 
       <div className="mt-4">

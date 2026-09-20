@@ -48,8 +48,8 @@ Public (safe to expose; used by the browser):
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` | One-time **$7.99** overlay / share URL. If set, the primary CTA calls `LemonSqueezy.Url.Open(url)`. |
-| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY` | Optional **$2.99/mo** overlay URL. Shows a secondary CTA when set. |
+| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` | One-time **$48** overlay / share URL. If set, the primary CTA calls `LemonSqueezy.Url.Open(url)`. |
+| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY` | Optional monthly overlay URL. Shows a secondary CTA only when set — not marketed as cheaper than $48 one-time. |
 | `NEXT_PUBLIC_CHECKOUT_URL` | Deprecated alias for the one-time URL. |
 
 Server-only (never prefix with `NEXT_PUBLIC_`):
@@ -70,8 +70,8 @@ Point Lemon **Settings → Webhooks** at `https://<your-domain>/api/webhooks/lem
 
 ### Demo vs production fallback
 
-- **Lemon configured** (public URL or API checkout): primary **Unlock Pro — $7.99**, optional monthly, **Continue free**. No demo button.
-- **Not configured + `NODE_ENV=development`** (`next dev`): **Unlock Pro — $7.99 (demo)** with a demo-mode label. Sets `invoice-pro-v1` locally.
+- **Lemon configured** (public URL or API checkout): primary **Unlock Pro — $48**, optional monthly button if that URL/variant is set, **Continue free**. No demo button.
+- **Not configured + `NODE_ENV=development`** (`next dev`): **Unlock Pro — $48 (demo)** with a demo-mode label. Sets `invoice-pro-v1` locally.
 - **Not configured + production** (`next build` / Vercel): **Payments coming soon**.
 
 You can still force Pro in the browser console:
