@@ -163,7 +163,9 @@ export function LandingPage() {
         <section id="pricing" className="border-t border-border bg-surface py-16">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <h2 className="text-[28px] font-semibold leading-9">Free vs Pro</h2>
-            <p className="mt-2 text-sm text-muted">USD. Pro is $48 one-time via Lemon Squeezy.</p>
+            <p className="mt-2 text-sm text-muted">
+              {`USD. Pro is $${PRICING.oneTime} one-time via Lemon Squeezy, or $${PRICING.monthly}/mo.`}
+            </p>
             <div className="mt-8 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-border bg-bg p-6">
                 <p className="text-sm font-medium text-muted">Free</p>
@@ -184,14 +186,14 @@ export function LandingPage() {
                 <p className="mt-2 text-[36px] font-semibold leading-[44px]">
                   ${PRICING.oneTime}
                 </p>
-                <p className="text-sm text-muted">one-time</p>
+                <p className="text-sm text-muted">one-time, or ${PRICING.monthly}/mo</p>
                 <ul className="mt-4 space-y-2 text-sm leading-5 text-muted">
                   <li>No watermark on preview or PDF</li>
                   <li>Logo on every invoice</li>
                   <li>Unlimited local drafts</li>
                 </ul>
                 <Link href="/app?upgrade=1" className="mt-6 inline-block">
-                  <Button>Go Pro — ${PRICING.oneTime}</Button>
+                  <Button>Unlock Pro — ${PRICING.oneTime}</Button>
                 </Link>
               </div>
             </div>

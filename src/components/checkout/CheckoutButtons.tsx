@@ -69,7 +69,7 @@ export function CheckoutButtons({
           onClick={() => void openCheckout("monthly")}
           disabled={opening}
         >
-          Subscribe monthly
+          {opening ? "Opening checkout…" : `Subscribe monthly — $${PRICING.monthly}`}
         </Button>
       ) : null}
       {onContinueFree ? (
