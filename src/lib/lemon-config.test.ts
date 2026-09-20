@@ -1,11 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getLemonPublicConfig,
   getPublicCheckoutUrl,
   isDemoCheckoutAllowed,
   resolvePaywallCheckout,
 } from "./lemon-config";
 
 describe("getPublicCheckoutUrl", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
   it("prefers NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL over the deprecated alias", () => {
     const env = {
       NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: " https://buy.lemon/one ",
@@ -21,6 +25,15 @@ describe("getPublicCheckoutUrl", () => {
     const env = { NEXT_PUBLIC_CHECKOUT_URL: "https://buy.lemon/old" };
     expect(getPublicCheckoutUrl("onetime", env)).toBe("https://buy.lemon/old");
     expect(getPublicCheckoutUrl("monthly", env)).toBeUndefined();
+  });
+
+  it("reads process.env.NEXT_PUBLIC_* when no env map is passed", () => {
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL", "https://buy.lemon/live");
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY", "https://buy.lemon/mo-live");
+    expect(getLemonPublicConfig()).toEqual({
+      oneTimeUrl: "https://buy.lemon/live",
+      monthlyUrl: "https://buy.lemon/mo-live",
+    });
   });
 });
 

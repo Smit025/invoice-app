@@ -12,7 +12,19 @@ function trimEnv(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
-export function getLemonPublicConfig(env: EnvMap = process.env): LemonPublicConfig {
+function readPublicEnv(): EnvMap {
+  // Next.js inlines `process.env.NEXT_PUBLIC_*` member access in the client bundle.
+  // Passing `process.env` as an object is NOT inlined and throws in the browser.
+  return {
+    NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL,
+    NEXT_PUBLIC_CHECKOUT_URL: process.env.NEXT_PUBLIC_CHECKOUT_URL,
+    NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY:
+      process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY,
+    NODE_ENV: process.env.NODE_ENV,
+  };
+}
+
+export function getLemonPublicConfig(env: EnvMap = readPublicEnv()): LemonPublicConfig {
   return {
     oneTimeUrl:
       trimEnv(env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL) ??
@@ -21,12 +33,15 @@ export function getLemonPublicConfig(env: EnvMap = process.env): LemonPublicConf
   };
 }
 
-export function getPublicCheckoutUrl(plan: CheckoutPlan, env: EnvMap = process.env): string | undefined {
+export function getPublicCheckoutUrl(
+  plan: CheckoutPlan,
+  env: EnvMap = readPublicEnv(),
+): string | undefined {
   const config = getLemonPublicConfig(env);
   return plan === "monthly" ? config.monthlyUrl : config.oneTimeUrl;
 }
 
-export function isDemoCheckoutAllowed(env: EnvMap = process.env): boolean {
+export function isDemoCheckoutAllowed(env: EnvMap = readPublicEnv()): boolean {
   return env.NODE_ENV === "development";
 }
 
