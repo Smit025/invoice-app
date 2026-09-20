@@ -1,5 +1,6 @@
 import type { Address, Invoice, TaxBreakdown } from "@/lib/types";
 import { dueStatus, formatAddressLines, formatDate, formatMoney } from "@/lib/format";
+import { isAllowedLogoDataUrl } from "@/lib/logo";
 import { Badge } from "@/components/ui/Controls";
 import { cn } from "@/lib/cn";
 
@@ -201,7 +202,7 @@ export function Meta({ invoice, align = "right" }: { invoice: Invoice; align?: "
 }
 
 export function Logo({ src }: { src?: string }) {
-  if (!src) return null;
+  if (!isAllowedLogoDataUrl(src)) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={src} alt="Business logo" className="max-h-12 max-w-12 object-contain" />

@@ -1,13 +1,19 @@
 export const LOGO_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const LOGO_MAX_EDGE = 320;
-const LOGO_JPEG_QUALITY = 0.82;
+const LOGO_JPEG_QUALITY = 0.72;
+const LOGO_DATA_URL = /^data:image\/(png|jpeg|webp);base64,/i;
 
 export function logoTypeError(type: string): string | null {
   if (!(LOGO_MIME_TYPES as readonly string[]).includes(type)) {
     return "Logo must be a PNG, JPEG, or WebP image.";
   }
   return null;
+}
+
+/** Persist/render only png|jpeg|webp data URLs — never svg/gif. */
+export function isAllowedLogoDataUrl(value: unknown): value is string {
+  return typeof value === "string" && LOGO_DATA_URL.test(value) && value.length < 400_000;
 }
 
 export function isAllowedLogoFile(file: Pick<File, "type" | "size">): string | null {

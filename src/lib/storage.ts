@@ -1,5 +1,6 @@
 import { DRAFT_KEY, PRO_KEY } from "./constants";
 import { createDefaultInvoice, emptyAddress, emptyItem } from "./invoice";
+import { isAllowedLogoDataUrl } from "./logo";
 import { clampNonNegative, clampTaxRate } from "./tax";
 import type { Address, Currency, DraftStore, Invoice, LineItem, Locale, TaxMode, TemplateId, Theme } from "./types";
 
@@ -73,10 +74,7 @@ export function hydrateInvoice(value: unknown): Invoice | null {
     notes: asString(record.notes, base.notes ?? ""),
     paymentTerms: asString(record.paymentTerms, base.paymentTerms ?? ""),
     templateId: oneOf(record.templateId, TEMPLATES, base.templateId),
-    logoDataUrl:
-      typeof record.logoDataUrl === "string" && record.logoDataUrl.startsWith("data:image/")
-        ? record.logoDataUrl
-        : undefined,
+    logoDataUrl: isAllowedLogoDataUrl(record.logoDataUrl) ? record.logoDataUrl : undefined,
     theme: oneOf(record.theme, THEMES, base.theme),
   };
 }
@@ -118,7 +116,7 @@ export function readDraftStore(): DraftStore {
   return parseDraftStore(window.localStorage.getItem(DRAFT_KEY));
 }
 
-function isQuotaExceeded(error: unknown): boolean {
+export function isQuotaExceeded(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const record = error as { name?: string; code?: number };
   return record.name === "QuotaExceededError" || record.code === 22 || record.code === 1014;

@@ -66,6 +66,14 @@ export function LineItemsEditor({
                 inputMode="decimal"
                 value={item.qty}
                 onChange={(e) => updateItem(item.id, { qty: parseNonNegativeInput(e.target.value) })}
+                onBlur={(e) => updateItem(item.id, { qty: parseNonNegativeInput(e.target.value) })}
+                onPaste={(e) => {
+                  const text = e.clipboardData.getData("text");
+                  if (text.trim() !== "" && (Number(text) < 0 || !Number.isFinite(Number(text)))) {
+                    e.preventDefault();
+                    updateItem(item.id, { qty: 0 });
+                  }
+                }}
                 className="tabular text-right"
               />
             </label>
@@ -78,6 +86,14 @@ export function LineItemsEditor({
                 inputMode="decimal"
                 value={item.rate}
                 onChange={(e) => updateItem(item.id, { rate: parseNonNegativeInput(e.target.value) })}
+                onBlur={(e) => updateItem(item.id, { rate: parseNonNegativeInput(e.target.value) })}
+                onPaste={(e) => {
+                  const text = e.clipboardData.getData("text");
+                  if (text.trim() !== "" && (Number(text) < 0 || !Number.isFinite(Number(text)))) {
+                    e.preventDefault();
+                    updateItem(item.id, { rate: 0 });
+                  }
+                }}
                 className="tabular text-right"
               />
             </label>

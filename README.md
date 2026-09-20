@@ -48,6 +48,6 @@ Drafts are stored at `invoice-draft-v1`. Theme (light/dark) applies to chrome on
 
 ## Stack notes
 
-- PDF: `html2canvas` 1.4.1 + `jsPDF` 4.2.1 from the live invoice DOM (A4, 12mm content inset). Export is a rasterized snapshot — text is not selectable, and very long invoices may paginate with minor clipping or scale quirks.
+- PDF: `html2canvas` 1.4.1 + `jsPDF` 4.2.1 (exact versions, no caret). Export is a rasterized snapshot of the live invoice DOM (A4, 12mm content inset) — text is not selectable. Very long invoices paginate by slicing the bitmap; you may see minor clipping, scale quirks, or a second nearly-blank page. html2canvas also struggles with some CSS (oklch, off-screen nodes, cross-origin images).
 - Tax is exclusive only. Rounding is half-up to 2 decimal places in order: line amounts → subtotal → tax → total. GST requires India + a state on both From and To; CGST+SGST is a remainder split of the same tax used for IGST. Rates are user-entered, not tax advice.
 - Design source: Sofia’s Invoice Generator Design Pack v1.2.

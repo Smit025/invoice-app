@@ -5,6 +5,7 @@ import {
   gstPlaceOfSupply,
   lineAmount,
   roundHalfUp,
+  splitGstHalves,
 } from "./tax";
 import type { Address, Invoice } from "./types";
 
@@ -224,9 +225,9 @@ describe("computeTotals", () => {
             items,
           }),
         );
-        expect(Math.round(intra.cgst * 100) + Math.round(intra.sgst * 100)).toBe(
-          Math.round(intra.tax * 100),
-        );
+        expect(roundHalfUp(intra.cgst + intra.sgst)).toBe(intra.tax);
+        expect(roundHalfUp(intra.cgst + intra.sgst)).toBe(inter.igst);
+        expect(splitGstHalves(intra.tax)).toEqual({ cgst: intra.cgst, sgst: intra.sgst });
         expect(intra.tax).toBe(inter.igst);
         expect(intra.tax).toBe(inter.tax);
       }
@@ -255,5 +256,28 @@ describe("computeTotals", () => {
     const t = computeTotals(invoice({ taxMode: "vat", taxRate: -20 }));
     expect(t.tax).toBe(0);
     expect(t.total).toBe(t.subtotal);
+  });
+
+  it("mixed IN/US countries stay incomplete even with matching region names", () => {
+    const mixed = invoice({
+      taxMode: "gst",
+      taxRate: 18,
+      from: party("Maharashtra", "IN"),
+      to: party("Maharashtra", "US"),
+    });
+    const t = computeTotals(mixed);
+    expect(gstPlaceOfSupply(mixed)).toBe("incomplete");
+    expect(t.gstIncomplete).toBe(true);
+    expect(t.cgst).toBe(0);
+    expect(t.sgst).toBe(0);
+    expect(t.tax).toBe(0);
+  });
+});
+
+describe("splitGstHalves", () => {
+  it("remainder split: cgst = round(tax/2), sgst = tax - cgst", () => {
+    expect(splitGstHalves(61.73)).toEqual({ cgst: 30.87, sgst: 30.86 });
+    expect(splitGstHalves(180)).toEqual({ cgst: 90, sgst: 90 });
+    expect(splitGstHalves(0.01)).toEqual({ cgst: 0.01, sgst: 0 });
   });
 });

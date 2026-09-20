@@ -52,8 +52,18 @@ export function TaxSection({
               inputMode="decimal"
               value={invoice.taxRate ?? 0}
               onChange={(e) =>
-                onChange({ ...invoice, taxRate: Math.min(100, parseNonNegativeInput(e.target.value)) })
+                onChange({ ...invoice, taxRate: Math.min(100, parseNonNegativeInput(e.target.value, 100)) })
               }
+              onBlur={(e) =>
+                onChange({ ...invoice, taxRate: Math.min(100, parseNonNegativeInput(e.target.value, 100)) })
+              }
+              onPaste={(e) => {
+                const text = e.clipboardData.getData("text");
+                if (text.trim() !== "" && (Number(text) < 0 || !Number.isFinite(Number(text)))) {
+                  e.preventDefault();
+                  onChange({ ...invoice, taxRate: 0 });
+                }
+              }}
               className="pr-8 tabular"
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">

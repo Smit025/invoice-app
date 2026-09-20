@@ -33,6 +33,17 @@ export function lineAmount(qty: number, rate: number): number {
   return roundHalfUp(amount);
 }
 
+/**
+ * Split one already-rounded tax amount: cgst = round(tax/2), sgst = tax - cgst.
+ * Done in integer cents so CGST + SGST === tax === IGST with no leftover penny.
+ */
+export function splitGstHalves(tax: number): { cgst: number; sgst: number } {
+  const taxCents = Math.round(clampNonNegative(tax) * 100);
+  const cgstCents = Math.round(taxCents / 2);
+  const sgstCents = taxCents - cgstCents;
+  return { cgst: cgstCents / 100, sgst: sgstCents / 100 };
+}
+
 function normalizeRegion(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -133,11 +144,7 @@ export function computeTotals(invoice: Invoice): TaxBreakdown {
 
     const tax = roundHalfUp((subtotal * rate) / 100);
     if (place === "intra") {
-      const taxCents = Math.round(tax * 100);
-      const cgstCents = Math.round(taxCents / 2);
-      const sgstCents = taxCents - cgstCents;
-      const cgst = cgstCents / 100;
-      const sgst = sgstCents / 100;
+      const { cgst, sgst } = splitGstHalves(tax);
       return emptyBreakdown(items, subtotal, {
         tax,
         total: roundHalfUp(subtotal + tax),
