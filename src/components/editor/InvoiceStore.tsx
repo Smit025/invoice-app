@@ -17,8 +17,8 @@ import {
   readIsPro,
   upsertDraft,
   writeDraftStore,
-  writeIsPro,
 } from "@/lib/storage";
+import { PRO_UNLOCKED_EVENT, unlockProLocally } from "@/lib/pro";
 import type { DraftStore, Invoice, PaywallReason } from "@/lib/types";
 
 type InvoiceContextValue = {
@@ -74,6 +74,15 @@ export function InvoiceProvider({ children }: { children: React.ReactNode }) {
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  useEffect(() => {
+    const onUnlock = () => {
+      setIsPro(true);
+      setPaywallOpen(false);
+    };
+    window.addEventListener(PRO_UNLOCKED_EVENT, onUnlock);
+    return () => window.removeEventListener(PRO_UNLOCKED_EVENT, onUnlock);
+  }, []);
+
   const persist = useCallback(
     (nextInvoice: Invoice, nextPro: boolean) => {
       setStore((prev) => {
@@ -110,9 +119,7 @@ export function InvoiceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const unlockPro = useCallback(() => {
-    writeIsPro(true);
-    setIsPro(true);
-    setPaywallOpen(false);
+    unlockProLocally();
   }, []);
 
   const saveNow = useCallback(() => persist(invoice, isPro), [invoice, isPro, persist]);

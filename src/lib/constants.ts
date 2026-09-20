@@ -2,9 +2,6 @@ export const DRAFT_KEY = "invoice-draft-v1";
 export const PRO_KEY = "invoice-pro-v1";
 export const PRODUCT_NAME = "InvoiceMaker";
 
-export const CHECKOUT_URL =
-  process.env.NEXT_PUBLIC_CHECKOUT_URL ?? "https://lemonsqueezy.com";
-
 export const CURRENCIES: Array<{
   code: "USD" | "EUR" | "GBP" | "INR";
   label: string;

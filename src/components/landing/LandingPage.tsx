@@ -163,7 +163,7 @@ export function LandingPage() {
         <section id="pricing" className="border-t border-border bg-surface py-16">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <h2 className="text-[28px] font-semibold leading-9">Free vs Pro</h2>
-            <p className="mt-2 text-sm text-muted">USD primary. Checkout comes later via Lemon Squeezy.</p>
+            <p className="mt-2 text-sm text-muted">USD primary. Pay once or monthly via Lemon Squeezy.</p>
             <div className="mt-8 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-border bg-bg p-6">
                 <p className="text-sm font-medium text-muted">Free</p>

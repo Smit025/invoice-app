@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { LemonScript } from "@/components/LemonScript";
+import { ToastHost } from "@/components/ToastHost";
 import "./globals.css";
 
 const inter = Inter({
@@ -39,7 +41,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBoot }} />
       </head>
-      <body className="min-h-full bg-bg font-sans text-text">{children}</body>
+      <body className="min-h-full bg-bg font-sans text-text">
+        <LemonScript />
+        {children}
+        <ToastHost />
+      </body>
     </html>
   );
 }

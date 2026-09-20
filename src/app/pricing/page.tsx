@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/Button";
+import { CheckoutButtons } from "@/components/checkout/CheckoutButtons";
 import { PRICING } from "@/lib/constants";
 import type { Metadata } from "next";
 
@@ -16,7 +17,7 @@ export default function PricingPage() {
         <BrandMark />
         <h1 className="mt-8 text-[28px] font-semibold leading-9">Free vs Pro</h1>
         <p className="mt-2 text-sm text-muted">
-          USD primary. Lemon Squeezy checkout will plug in here later.
+          USD primary. Checkout runs through Lemon Squeezy when configured.
         </p>
         <div className="mt-6 space-y-4">
           <div className="rounded-xl border border-border p-5">
@@ -32,6 +33,9 @@ export default function PricingPage() {
             <p className="mt-1 text-sm text-muted">
               No watermark, logo upload, unlimited drafts on this device.
             </p>
+            <div className="mt-4">
+              <CheckoutButtons />
+            </div>
           </div>
         </div>
         <div className="mt-6 flex gap-3">
