@@ -57,55 +57,41 @@ export function EditorApp() {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col bg-bg">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden bg-bg">
       <header className="flex h-14 items-center justify-between gap-2 border-b border-border px-3 md:px-6">
         <Link href="/" className="shrink-0">
-          <BrandMark compact className="md:hidden" />
+          <span className="md:hidden">
+            <BrandMark compact />
+          </span>
           <span className="hidden md:inline">
             <BrandMark />
           </span>
         </Link>
         <div className="flex min-w-0 items-center gap-1 md:gap-2">
-          {isPro && drafts.length > 0 ? (
-            <label className="hidden md:block">
-              <span className="sr-only">Drafts</span>
-              <select
-                className="h-10 max-w-[140px] rounded-lg border border-border-strong bg-bg px-2 text-sm"
-                value={invoice.id}
-                onChange={(e) => loadDraft(e.target.value)}
-              >
-                {drafts.map((draft) => (
-                  <option key={draft.id} value={draft.id}>
-                    {draft.number || "Draft"} · {draft.to.name || "No client"}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <Button
-              variant="ghost"
-              className="hidden md:inline-flex"
-              onClick={() => openPaywall("drafts")}
-            >
-              Drafts
+          <div className="hidden md:flex items-center gap-2">
+            {isPro && drafts.length > 0 ? (
+              <label>
+                <span className="sr-only">Drafts</span>
+                <select
+                  className="h-10 max-w-[140px] rounded-lg border border-border-strong bg-bg px-2 text-sm"
+                  value={invoice.id}
+                  onChange={(e) => loadDraft(e.target.value)}
+                >
+                  {drafts.map((draft) => (
+                    <option key={draft.id} value={draft.id}>
+                      {draft.number || "Draft"} · {draft.to.name || "No client"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <Button variant="ghost" onClick={() => openPaywall("drafts")}>
+                Drafts
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => newDraft()}>
+              New
             </Button>
-          )}
-          <Button variant="ghost" className="hidden md:inline-flex" onClick={() => newDraft()}>
-            New
-          </Button>
-          <Button variant="ghost" onClick={() => setTemplatesOpen(true)}>
-            Templates
-          </Button>
-          <Button
-            variant="ghost"
-            className="md:hidden"
-            onClick={() =>
-              setInvoice({ ...invoice, theme: invoice.theme === "dark" ? "light" : "dark" })
-            }
-          >
-            {invoice.theme === "dark" ? "Light" : "Dark"}
-          </Button>
-          <span className="hidden md:inline-flex">
             <SegmentedControl
               ariaLabel="Theme"
               size="sm"
@@ -116,19 +102,32 @@ export function EditorApp() {
                 { value: "dark", label: "Dark" },
               ]}
             />
-          </span>
-          <Button className="hidden lg:inline-flex" onClick={onPdf} disabled={exporting}>
-            {exporting ? "Preparing…" : "Download PDF"}
+          </div>
+          <Button variant="ghost" onClick={() => setTemplatesOpen(true)}>
+            Templates
           </Button>
-          {!isPro ? (
-            <Button variant="secondary" className="hidden lg:inline-flex" onClick={() => openPaywall("pricing")}>
-              Upgrade
+          <div className="md:hidden">
+            <Button
+              variant="ghost"
+              onClick={() =>
+                setInvoice({ ...invoice, theme: invoice.theme === "dark" ? "light" : "dark" })
+              }
+            >
+              {invoice.theme === "dark" ? "Light" : "Dark"}
             </Button>
-          ) : (
-            <span className="hidden lg:inline-flex">
+          </div>
+          <div className="hidden lg:flex items-center gap-2">
+            <Button onClick={onPdf} disabled={exporting}>
+              {exporting ? "Preparing…" : "Download PDF"}
+            </Button>
+            {!isPro ? (
+              <Button variant="secondary" onClick={() => openPaywall("pricing")}>
+                Upgrade
+              </Button>
+            ) : (
               <Badge tone="accent">Pro</Badge>
-            </span>
-          )}
+            )}
+          </div>
         </div>
       </header>
 
@@ -148,7 +147,7 @@ export function EditorApp() {
         ))}
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
           className={cn(
             "w-full overflow-y-auto border-r border-border lg:max-w-[480px] lg:basis-[44%]",
@@ -157,7 +156,12 @@ export function EditorApp() {
         >
           {hydrated ? <InvoiceForm /> : <p className="p-6 text-sm text-muted">Restoring draft…</p>}
         </div>
-        <div className={cn("relative min-w-0 flex-1", tab !== "preview" && "hidden lg:block")}>
+        <div
+          className={cn(
+            "relative min-h-0 min-w-0 flex-1 overflow-hidden",
+            tab !== "preview" && "hidden lg:block",
+          )}
+        >
           {hydrated ? <InvoicePreview paperRef={paperRef} /> : null}
         </div>
       </div>

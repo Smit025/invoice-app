@@ -25,7 +25,7 @@ export function InvoicePreview({
       };
 
   return (
-    <div className="relative flex h-full min-h-[70vh] flex-col bg-surface lg:min-h-0">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-surface">
       {!live ? (
         <p className="px-4 pt-3 text-center text-xs text-muted">
           Sample preview — add your name or a line item to see live data

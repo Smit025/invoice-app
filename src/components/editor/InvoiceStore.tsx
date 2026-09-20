@@ -196,6 +196,9 @@ export function InvoiceProvider({ children }: { children: React.ReactNode }) {
           setPaywallReason("pdf");
           setPaywallOpen(true);
         }
+      } catch (error) {
+        console.error(error);
+        window.alert("Could not create the PDF. Try again from the Preview tab.");
       } finally {
         setExporting(false);
       }

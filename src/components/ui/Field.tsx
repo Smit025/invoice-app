@@ -42,7 +42,7 @@ export function Field({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={htmlFor} className="section-label">
+      <label htmlFor={htmlFor} className="text-xs font-medium leading-4 text-muted">
         {label}
       </label>
       {children}
