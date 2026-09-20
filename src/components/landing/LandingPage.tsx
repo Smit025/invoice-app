@@ -163,7 +163,7 @@ export function LandingPage() {
         <section id="pricing" className="border-t border-border bg-surface py-16">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <h2 className="text-[28px] font-semibold leading-9">Free vs Pro</h2>
-            <p className="mt-2 text-sm text-muted">USD primary. Checkout comes later via Lemon Squeezy.</p>
+            <p className="mt-2 text-sm text-muted">USD. Pro is $48 one-time via Lemon Squeezy.</p>
             <div className="mt-8 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-border bg-bg p-6">
                 <p className="text-sm font-medium text-muted">Free</p>
@@ -182,23 +182,17 @@ export function LandingPage() {
               <div className="rounded-xl border border-accent bg-bg p-6">
                 <p className="text-sm font-medium text-accent">Pro</p>
                 <p className="mt-2 text-[36px] font-semibold leading-[44px]">
-                  ${PRICING.oneTime}{" "}
-                  <span className="text-base font-normal text-muted line-through">
-                    ${PRICING.oneTimeAnchor}
-                  </span>
+                  ${PRICING.oneTime}
                 </p>
-                <p className="text-sm text-muted">one-time, or ${PRICING.monthly}/mo</p>
+                <p className="text-sm text-muted">one-time</p>
                 <ul className="mt-4 space-y-2 text-sm leading-5 text-muted">
                   <li>No watermark on preview or PDF</li>
                   <li>Logo on every invoice</li>
                   <li>Unlimited local drafts</li>
                 </ul>
                 <Link href="/app?upgrade=1" className="mt-6 inline-block">
-                  <Button>Go Pro</Button>
+                  <Button>Go Pro — ${PRICING.oneTime}</Button>
                 </Link>
-                <p className="mt-3 text-xs text-muted">
-                  India: ₹{PRICING.inrOneTime} or ₹{PRICING.inrMonthly}/mo
-                </p>
               </div>
             </div>
           </div>

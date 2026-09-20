@@ -1,10 +1,10 @@
 "use client";
 
-import { CHECKOUT_URL, PRICING } from "@/lib/constants";
+import { PRICING } from "@/lib/constants";
 import { sampleInvoice } from "@/lib/invoice";
-import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { InvoiceDocument } from "@/components/templates/InvoiceDocument";
+import { CheckoutButtons } from "@/components/checkout/CheckoutButtons";
 import { useInvoice } from "@/components/editor/InvoiceStore";
 
 const COPY: Record<string, { title: string; body: string }> = {
@@ -22,7 +22,7 @@ const COPY: Record<string, { title: string; body: string }> = {
   },
   pdf: {
     title: "Enjoying InvoiceMaker?",
-    body: "Pro removes the watermark and adds logo + draft history — $7.99 once, or $2.99/mo.",
+    body: "Pro removes the watermark and adds logo + draft history — $48 one-time.",
   },
   pricing: {
     title: "Upgrade to Pro",
@@ -31,7 +31,7 @@ const COPY: Record<string, { title: string; body: string }> = {
 };
 
 export function PaywallModal() {
-  const { paywallOpen, paywallReason, closePaywall, unlockPro } = useInvoice();
+  const { paywallOpen, paywallReason, closePaywall } = useInvoice();
   const copy = COPY[paywallReason] ?? COPY.pricing;
   const sample = sampleInvoice("classic");
 
@@ -62,36 +62,13 @@ export function PaywallModal() {
       </div>
 
       <div className="mt-4 rounded-lg bg-surface p-3">
-        <p className="text-sm font-semibold">
-          ${PRICING.oneTime} one-time{" "}
-          <span className="font-normal text-muted line-through">${PRICING.oneTimeAnchor}</span>
-        </p>
-        <p className="text-sm text-muted">or ${PRICING.monthly}/mo · USD</p>
-        <p className="mt-1 text-xs text-muted">
-          India: ₹{PRICING.inrOneTime} or ₹{PRICING.inrMonthly}/mo
-        </p>
+        <p className="text-sm font-semibold">${PRICING.oneTime} one-time</p>
+        <p className="text-sm text-muted">USD · own Pro on this device</p>
       </div>
 
-      <div className="mt-4 flex flex-col gap-2">
-        <a
-          href={CHECKOUT_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex h-10 items-center justify-center rounded-lg bg-accent px-4 text-sm font-medium text-[#ffffff] hover:bg-accent-hover"
-        >
-          Unlock Pro — ${PRICING.oneTime}
-        </a>
-        <Button variant="secondary" onClick={unlockPro}>
-          Unlock Pro (demo)
-        </Button>
-        <Button variant="ghost" onClick={closePaywall}>
-          Continue free
-        </Button>
+      <div className="mt-4">
+        <CheckoutButtons onContinueFree={closePaywall} />
       </div>
-      <p className="mt-2 text-center text-[11px] text-muted">
-        Checkout is a Lemon Squeezy placeholder. Demo unlock sets{" "}
-        <code className="font-mono">invoice-pro-v1</code> to 1.
-      </p>
     </Modal>
   );
 }
