@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     template: "%s · InvoiceMaker",
   },
   description:
-    "Free invoice maker and invoice generator for the US and Europe. Create VAT invoices, sales tax invoices, and GST invoices in under a minute. Download a PDF — no signup.",
+    "Free invoices with VAT & sales tax — USD, EUR, or GBP. Built for EU and US freelancers. Create a clean PDF in minutes — no signup.",
   keywords: [
     "invoice generator",
     "free invoice maker",
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "InvoiceMaker — Free Invoice Generator",
     description:
-      "Beautiful invoices in under a minute. Free forever with a watermark. VAT, sales tax, and GST ready.",
+      "Free invoices with VAT & sales tax — USD, EUR, or GBP. Built for EU and US freelancers. Create a clean PDF in minutes — no signup.",
     type: "website",
   },
 };

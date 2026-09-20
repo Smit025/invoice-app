@@ -4,9 +4,12 @@ import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/Button";
 import { InvoiceDocument } from "@/components/templates/InvoiceDocument";
+import { Badge } from "@/components/ui/Controls";
 import { PRICING, PRODUCT_NAME, TEMPLATES } from "@/lib/constants";
 import { sampleInvoice } from "@/lib/invoice";
 import type { TemplateId } from "@/lib/types";
+
+const HERO_PROOF_CHIPS = ["Tax on free", "No signup", "USD · EUR · GBP", "3 templates"] as const;
 
 function MiniInvoice({ templateId }: { templateId: TemplateId }) {
   return (
@@ -44,19 +47,28 @@ export function LandingPage() {
       <main>
         <section className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pt-16">
           <div className="mx-auto max-w-[720px] text-center">
-            <p className="section-label mb-3">Invoice generator · Free invoice maker</p>
+            <p className="mb-3 text-xs font-medium leading-4 tracking-[0.06em] text-muted">
+              Free invoice maker · EU + US
+            </p>
             <h1 className="text-[36px] font-semibold leading-[44px] tracking-tight sm:text-5xl sm:leading-[56px]">
-              Beautiful invoices in under a minute
+              Free invoices with VAT & sales tax — USD, EUR, or GBP
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-base leading-6 text-muted">
-              Free forever with a watermark. VAT, US sales tax, and GST built in. Download a
-              PDF — no signup, no backend, works in your browser.
+              Built for EU and US freelancers. Create a clean PDF in minutes — no signup. Upgrade
+              to Pro when you want your logo and drafts without the watermark.
             </p>
             <div className="mt-6 flex justify-center">
               <Link href="/app">
                 <Button className="h-11 px-5">Create invoice</Button>
               </Link>
             </div>
+            <ul className="mt-5 flex flex-wrap justify-center gap-2">
+              {HERO_PROOF_CHIPS.map((chip) => (
+                <li key={chip}>
+                  <Badge>{chip}</Badge>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="mx-auto mt-12 max-w-4xl overflow-hidden rounded-xl border border-border bg-surface">
