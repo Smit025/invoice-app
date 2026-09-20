@@ -4,7 +4,7 @@ import Script from "next/script";
 import { unlockProLocally } from "@/lib/pro";
 import { showToast } from "@/lib/toast";
 
-const LEMON_JS_SRC = "https://app.lemonsqueezy.com/js/lemon.js";
+const LEMON_JS_SRC = "https://assets.lemonsqueezy.com/lemon.js";
 
 function handleLemonEvent(event: { event: string }): void {
   if (event.event !== "Checkout.Success") return;

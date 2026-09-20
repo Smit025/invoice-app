@@ -8,15 +8,28 @@ import { showToast } from "@/lib/toast";
 
 type ApiCapabilities = { oneTime: boolean; monthly: boolean };
 
-function openLemonOverlay(url: string): boolean {
-  if (typeof window === "undefined") return false;
+function getLemonOpen(): ((url: string) => void) | undefined {
+  if (typeof window === "undefined") return undefined;
   window.createLemonSqueezy?.();
-  if (window.LemonSqueezy?.Url?.Open) {
-    window.LemonSqueezy.Url.Open(url);
-    return true;
+  const lemon = window.LemonSqueezy;
+  if (!lemon) return undefined;
+  if (typeof lemon.Url?.Open === "function") {
+    return (url: string) => lemon.Url.Open(url);
+  }
+  return undefined;
+}
+
+async function openLemonOverlay(url: string): Promise<void> {
+  const deadline = Date.now() + 1500;
+  while (Date.now() < deadline) {
+    const open = getLemonOpen();
+    if (open) {
+      open(url);
+      return;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
   }
   window.open(url, "_blank", "noopener,noreferrer");
-  return true;
 }
 
 async function fetchApiCapabilities(): Promise<ApiCapabilities> {
@@ -71,7 +84,7 @@ export function useLemonCheckout() {
         const publicUrl =
           plan === "monthly" ? publicConfig.monthlyUrl : publicConfig.oneTimeUrl;
         if (publicUrl) {
-          openLemonOverlay(publicUrl);
+          await openLemonOverlay(publicUrl);
           return;
         }
 
@@ -90,7 +103,7 @@ export function useLemonCheckout() {
           showToast("Checkout is unavailable right now. Try again in a moment.");
           return;
         }
-        openLemonOverlay(url);
+        await openLemonOverlay(url);
       } catch {
         showToast("Could not open checkout. Check your connection and try again.");
       } finally {
