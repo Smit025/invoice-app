@@ -7,7 +7,7 @@ const jsonLd = {
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web",
   description:
-    "Free invoice generator and invoice maker for VAT invoices, US sales tax, and GST. Create and download PDFs in the browser.",
+    "Free invoices with VAT and sales tax in USD, EUR, or GBP. Built for EU and US freelancers. Create and download a PDF in the browser — no signup.",
   offers: {
     "@type": "AggregateOffer",
     lowPrice: "0",
