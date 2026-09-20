@@ -64,6 +64,7 @@ export type TaxBreakdown = {
   sgst: number;
   igst: number;
   intraState: boolean;
+  gstIncomplete: boolean;
 };
 
 export type PaywallReason = "watermark" | "logo" | "drafts" | "pdf" | "pricing";

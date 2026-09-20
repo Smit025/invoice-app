@@ -31,7 +31,7 @@ npm run start   # serve the production build
 **Free:** full editor, three templates, PDF, watermark, one `localStorage` draft, no logo.  
 **Pro stub:** no watermark, logo upload, unlimited local drafts.
 
-Unlock Pro in the paywall with **Unlock Pro (demo)**, or in the browser console:
+Unlocking Pro via `localStorage` is a **demo stub only** — it is not a real purchase.
 
 ```js
 localStorage.setItem("invoice-pro-v1", "1");
@@ -48,6 +48,6 @@ Drafts are stored at `invoice-draft-v1`. Theme (light/dark) applies to chrome on
 
 ## Stack notes
 
-- PDF: `html2canvas` + `jsPDF` from the live invoice DOM (A4, 12mm content inset).
-- Tax is exclusive only. Rounding is half-up to 2 decimal places in order: line amounts → subtotal → tax → total. GST splits CGST+SGST vs IGST from From/To state.
+- PDF: `html2canvas` 1.4.1 + `jsPDF` 4.2.1 from the live invoice DOM (A4, 12mm content inset). Export is a rasterized snapshot — text is not selectable, and very long invoices may paginate with minor clipping or scale quirks.
+- Tax is exclusive only. Rounding is half-up to 2 decimal places in order: line amounts → subtotal → tax → total. GST requires India + a state on both From and To; CGST+SGST is a remainder split of the same tax used for IGST. Rates are user-entered, not tax advice.
 - Design source: Sofia’s Invoice Generator Design Pack v1.2.

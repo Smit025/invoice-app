@@ -1,7 +1,7 @@
 "use client";
 
 import { GST_RATES } from "@/lib/constants";
-import { isIntraState } from "@/lib/tax";
+import { gstPlaceOfSupply, parseNonNegativeInput } from "@/lib/tax";
 import type { Invoice, TaxMode } from "@/lib/types";
 import { Chip, SegmentedControl } from "@/components/ui/Controls";
 import { Field, Input } from "@/components/ui/Field";
@@ -20,7 +20,7 @@ export function TaxSection({
   invoice: Invoice;
   onChange: (invoice: Invoice) => void;
 }) {
-  const intra = isIntraState(invoice);
+  const place = invoice.taxMode === "gst" ? gstPlaceOfSupply(invoice) : null;
 
   return (
     <div className="space-y-3">
@@ -51,7 +51,9 @@ export function TaxSection({
               step="0.001"
               inputMode="decimal"
               value={invoice.taxRate ?? 0}
-              onChange={(e) => onChange({ ...invoice, taxRate: Number(e.target.value) })}
+              onChange={(e) =>
+                onChange({ ...invoice, taxRate: Math.min(100, parseNonNegativeInput(e.target.value)) })
+              }
               className="pr-8 tabular"
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted">
@@ -75,17 +77,30 @@ export function TaxSection({
               </Chip>
             ))}
           </div>
-          <p className="text-xs leading-4 text-muted">
-            {intra
-              ? "Same state: CGST + SGST will split the rate."
-              : "Different states: IGST applies on the full rate."}
-          </p>
+          {place === "incomplete" ? (
+            <p role="alert" className="text-xs leading-4 text-danger">
+              Set country to India and pick a state on both From and To. GST is not calculated — and
+              PDF export is blocked — until both are set.
+            </p>
+          ) : (
+            <p className="text-xs leading-4 text-muted">
+              {place === "intra"
+                ? "Same state: CGST + SGST will split the rate."
+                : "Different states: IGST applies on the full rate."}
+            </p>
+          )}
         </div>
       ) : null}
 
       {invoice.taxMode === "vat" ? (
         <p className="text-xs leading-4 text-muted">
           Exclusive VAT. Add a VAT number on From (and To if needed).
+        </p>
+      ) : null}
+
+      {invoice.taxMode !== "none" ? (
+        <p className="text-xs leading-4 text-muted">
+          Rates are entered by you. This is not tax advice.
         </p>
       ) : null}
     </div>

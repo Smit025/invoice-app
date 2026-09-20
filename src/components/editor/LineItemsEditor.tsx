@@ -1,6 +1,6 @@
 "use client";
 
-import { computeTotals, lineAmount } from "@/lib/tax";
+import { computeTotals, lineAmount, parseNonNegativeInput } from "@/lib/tax";
 import { formatMoney } from "@/lib/format";
 import { emptyItem } from "@/lib/invoice";
 import type { Invoice } from "@/lib/types";
@@ -65,7 +65,7 @@ export function LineItemsEditor({
                 step="0.01"
                 inputMode="decimal"
                 value={item.qty}
-                onChange={(e) => updateItem(item.id, { qty: Number(e.target.value) })}
+                onChange={(e) => updateItem(item.id, { qty: parseNonNegativeInput(e.target.value) })}
                 className="tabular text-right"
               />
             </label>
@@ -77,7 +77,7 @@ export function LineItemsEditor({
                 step="0.01"
                 inputMode="decimal"
                 value={item.rate}
-                onChange={(e) => updateItem(item.id, { rate: Number(e.target.value) })}
+                onChange={(e) => updateItem(item.id, { rate: parseNonNegativeInput(e.target.value) })}
                 className="tabular text-right"
               />
             </label>

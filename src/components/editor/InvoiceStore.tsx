@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createDefaultInvoice } from "@/lib/invoice";
 import { downloadInvoicePdf } from "@/lib/pdf";
+import { computeTotals } from "@/lib/tax";
 import {
   readDraftStore,
   readIsPro,
@@ -188,6 +189,13 @@ export function InvoiceProvider({ children }: { children: React.ReactNode }) {
 
   const exportPdf = useCallback(
     async (element: HTMLElement) => {
+      const totals = computeTotals(invoice);
+      if (invoice.taxMode === "gst" && totals.gstIncomplete) {
+        window.alert(
+          "Set country to India and pick a state on both From and To before exporting a GST invoice.",
+        );
+        return;
+      }
       setExporting(true);
       try {
         await downloadInvoicePdf(element, invoice);

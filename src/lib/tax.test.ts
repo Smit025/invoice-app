@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { computeTotals, lineAmount, roundHalfUp } from "./tax";
-import type { Invoice } from "./types";
+import {
+  clampNonNegative,
+  computeTotals,
+  gstPlaceOfSupply,
+  lineAmount,
+  roundHalfUp,
+} from "./tax";
+import type { Address, Invoice } from "./types";
+
+function party(region: string, country = "IN"): Address {
+  return {
+    name: "Co",
+    address1: "1",
+    city: "City",
+    region,
+    postal: "000000",
+    country,
+  };
+}
 
 function invoice(overrides: Partial<Invoice> = {}): Invoice {
   return {
@@ -44,12 +61,21 @@ describe("roundHalfUp", () => {
   });
 });
 
-describe("lineAmount", () => {
+describe("clampNonNegative / lineAmount", () => {
   it("qty × rate then half-up 2dp", () => {
     expect(lineAmount(1, 10.555)).toBe(10.56);
     expect(lineAmount(2, 19.99)).toBe(39.98);
     expect(lineAmount(3, 0.1)).toBe(0.3);
     expect(lineAmount(1.5, 100)).toBe(150);
+  });
+
+  it("clamps non-finite and negative qty/rate to 0", () => {
+    expect(clampNonNegative(-3)).toBe(0);
+    expect(clampNonNegative(Number.NaN)).toBe(0);
+    expect(clampNonNegative(Number.POSITIVE_INFINITY)).toBe(0);
+    expect(lineAmount(-2, 10)).toBe(0);
+    expect(lineAmount(2, -10)).toBe(0);
+    expect(lineAmount(Number.NaN, 10)).toBe(0);
   });
 });
 
@@ -95,34 +121,22 @@ describe("computeTotals", () => {
     expect(t.taxLabel).toBe("VAT");
   });
 
-  it("gst intra-state: CGST + SGST split", () => {
+  it("gst intra-state: CGST + SGST split from one tax amount", () => {
     const t = computeTotals(
       invoice({
         taxMode: "gst",
         taxRate: 18,
-        from: {
-          name: "A",
-          address1: "1",
-          city: "Mumbai",
-          region: "Maharashtra",
-          postal: "400001",
-          country: "IN",
-        },
-        to: {
-          name: "B",
-          address1: "2",
-          city: "Pune",
-          region: "Maharashtra",
-          postal: "411001",
-          country: "IN",
-        },
+        from: party("Maharashtra"),
+        to: party("Maharashtra"),
         items: [{ id: "1", description: "A", qty: 1, rate: 1000, amount: 0 }],
       }),
     );
     expect(t.intraState).toBe(true);
+    expect(t.gstIncomplete).toBe(false);
     expect(t.cgst).toBe(90);
     expect(t.sgst).toBe(90);
     expect(t.igst).toBe(0);
+    expect(t.cgst + t.sgst).toBe(t.tax);
     expect(t.tax).toBe(180);
     expect(t.total).toBe(1180);
   });
@@ -132,31 +146,91 @@ describe("computeTotals", () => {
       invoice({
         taxMode: "gst",
         taxRate: 18,
-        from: {
-          name: "A",
-          address1: "1",
-          city: "Mumbai",
-          region: "Maharashtra",
-          postal: "400001",
-          country: "IN",
-        },
-        to: {
-          name: "B",
-          address1: "2",
-          city: "Bengaluru",
-          region: "Karnataka",
-          postal: "560001",
-          country: "IN",
-        },
+        from: party("Maharashtra"),
+        to: party("Karnataka"),
         items: [{ id: "1", description: "A", qty: 1, rate: 1000, amount: 0 }],
       }),
     );
     expect(t.intraState).toBe(false);
+    expect(t.gstIncomplete).toBe(false);
     expect(t.cgst).toBe(0);
     expect(t.sgst).toBe(0);
     expect(t.igst).toBe(180);
     expect(t.taxLabel).toBe("IGST");
     expect(t.total).toBe(1180);
+  });
+
+  it("gst blank regions do not invent CGST+SGST", () => {
+    const bothBlank = computeTotals(
+      invoice({
+        taxMode: "gst",
+        taxRate: 18,
+        from: party(""),
+        to: party(""),
+      }),
+    );
+    expect(gstPlaceOfSupply(invoice({ from: party(""), to: party("") }))).toBe("incomplete");
+    expect(bothBlank.gstIncomplete).toBe(true);
+    expect(bothBlank.cgst).toBe(0);
+    expect(bothBlank.sgst).toBe(0);
+    expect(bothBlank.igst).toBe(0);
+    expect(bothBlank.tax).toBe(0);
+    expect(bothBlank.total).toBe(bothBlank.subtotal);
+
+    const oneBlank = computeTotals(
+      invoice({
+        taxMode: "gst",
+        taxRate: 18,
+        from: party("Maharashtra"),
+        to: party(""),
+      }),
+    );
+    expect(oneBlank.gstIncomplete).toBe(true);
+    expect(oneBlank.tax).toBe(0);
+
+    const notIndia = computeTotals(
+      invoice({
+        taxMode: "gst",
+        taxRate: 18,
+        from: party("Maharashtra", "US"),
+        to: party("Maharashtra", "US"),
+      }),
+    );
+    expect(notIndia.gstIncomplete).toBe(true);
+    expect(notIndia.tax).toBe(0);
+  });
+
+  it("CGST+SGST always equals full GST tax (same as IGST) — property", () => {
+    const rates = [5, 12, 18, 28];
+    const amounts = [1, 1.11, 10.55, 99.99, 100, 333.33, 1000, 1234.56];
+    for (const taxRate of rates) {
+      for (const rate of amounts) {
+        const items = [{ id: "1", description: "A", qty: 1, rate, amount: 0 }];
+        const intra = computeTotals(
+          invoice({
+            taxMode: "gst",
+            taxRate,
+            from: party("Maharashtra"),
+            to: party("Maharashtra"),
+            items,
+          }),
+        );
+        const inter = computeTotals(
+          invoice({
+            taxMode: "gst",
+            taxRate,
+            from: party("Maharashtra"),
+            to: party("Karnataka"),
+            items,
+          }),
+        );
+        expect(Math.round(intra.cgst * 100) + Math.round(intra.sgst * 100)).toBe(
+          Math.round(intra.tax * 100),
+        );
+        expect(intra.tax).toBe(inter.igst);
+        expect(intra.tax).toBe(inter.tax);
+      }
+    }
   });
 
   it("rounds in order: lines → subtotal → tax → total", () => {
@@ -175,5 +249,11 @@ describe("computeTotals", () => {
     expect(t.subtotal).toBe(21.12);
     expect(t.tax).toBe(4.22);
     expect(t.total).toBe(25.34);
+  });
+
+  it("clamps negative taxRate", () => {
+    const t = computeTotals(invoice({ taxMode: "vat", taxRate: -20 }));
+    expect(t.tax).toBe(0);
+    expect(t.total).toBe(t.subtotal);
   });
 });

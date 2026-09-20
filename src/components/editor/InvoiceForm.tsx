@@ -1,6 +1,7 @@
 "use client";
 
 import { CURRENCIES, LOCALES } from "@/lib/constants";
+import { compressLogo, isAllowedLogoFile } from "@/lib/logo";
 import { computeTotals, formatMoney } from "@/lib/format";
 import type { Invoice } from "@/lib/types";
 import { AddressFields } from "@/components/editor/AddressFields";
@@ -23,15 +24,14 @@ export function InvoiceForm() {
       setInvoice({ ...invoice, logoDataUrl: undefined });
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      window.alert("Logo must be under 2MB.");
+    const typeError = isAllowedLogoFile(file);
+    if (typeError) {
+      window.alert(typeError);
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setInvoice({ ...invoice, logoDataUrl: String(reader.result) });
-    };
-    reader.readAsDataURL(file);
+    void compressLogo(file)
+      .then((logoDataUrl) => setInvoice((prev) => ({ ...prev, logoDataUrl })))
+      .catch(() => window.alert("Could not read that logo. Try a smaller PNG, JPEG, or WebP."));
   };
 
   return (
@@ -181,11 +181,15 @@ export function InvoiceForm() {
             </button>
           ) : null}
         </div>
-        <Field label="Logo" htmlFor="logo" hint={isPro ? "PNG or JPG, max 2MB." : "Logo upload is a Pro feature."}>
+        <Field
+          label="Logo"
+          htmlFor="logo"
+          hint={isPro ? "PNG, JPEG, or WebP. Max 2MB — stored compressed." : "Logo upload is a Pro feature."}
+        >
           <Input
             id="logo"
             type="file"
-            accept="image/*"
+            accept="image/png,image/jpeg,image/webp"
             disabled={!isPro}
             onClick={(e) => {
               if (!isPro) {
