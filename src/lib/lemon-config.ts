@@ -2,6 +2,9 @@ export type CheckoutPlan = "onetime" | "monthly";
 
 export type EnvMap = Record<string, string | undefined>;
 
+export const DEFAULT_LEMONSQUEEZY_CHECKOUT_URL =
+  "https://myinvoicemaker.lemonsqueezy.com/checkout/buy/c3c13987-5ccc-4a5c-b260-fd7eae12baca";
+
 export type LemonPublicConfig = {
   oneTimeUrl?: string;
   monthlyUrl?: string;
@@ -16,7 +19,8 @@ function readPublicEnv(): EnvMap {
   // Next.js inlines `process.env.NEXT_PUBLIC_*` member access in the client bundle.
   // Passing `process.env` as an object is NOT inlined and throws in the browser.
   return {
-    NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL,
+    NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL:
+      process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL ?? DEFAULT_LEMONSQUEEZY_CHECKOUT_URL,
     NEXT_PUBLIC_CHECKOUT_URL: process.env.NEXT_PUBLIC_CHECKOUT_URL,
     NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY:
       process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY,

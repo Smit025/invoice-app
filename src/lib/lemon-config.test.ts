@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_LEMONSQUEEZY_CHECKOUT_URL,
   getLemonPublicConfig,
   getPublicCheckoutUrl,
   isDemoCheckoutAllowed,
@@ -27,7 +28,13 @@ describe("getPublicCheckoutUrl", () => {
     expect(getPublicCheckoutUrl("monthly", env)).toBeUndefined();
   });
 
-  it("reads process.env.NEXT_PUBLIC_* when no env map is passed", () => {
+  it("defaults to the public $48 Lemon buy URL when the env var is unset", () => {
+    delete process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL;
+    delete process.env.NEXT_PUBLIC_CHECKOUT_URL;
+    expect(getLemonPublicConfig().oneTimeUrl).toBe(DEFAULT_LEMONSQUEEZY_CHECKOUT_URL);
+  });
+
+  it("lets NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL override the default", () => {
     vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL", "https://buy.lemon/live");
     vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY", "https://buy.lemon/mo-live");
     expect(getLemonPublicConfig()).toEqual({

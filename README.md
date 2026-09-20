@@ -48,7 +48,7 @@ Public (safe to expose; used by the browser):
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` | One-time **$48** overlay / share URL. If set, the primary CTA calls `LemonSqueezy.Url.Open(url)`. |
+| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` | One-time **$48** overlay / share URL. Defaults in code to the live Pro buy link so production works before Vercel env is set. Override here if needed. |
 | `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY` | Optional monthly overlay URL. Shows a secondary CTA only when set — not marketed as cheaper than $48 one-time. |
 | `NEXT_PUBLIC_CHECKOUT_URL` | Deprecated alias for the one-time URL. |
 
@@ -62,7 +62,7 @@ Server-only (never prefix with `NEXT_PUBLIC_`):
 | `LEMONSQUEEZY_VARIANT_ID_MONTHLY` | Optional monthly variant id. |
 | `LEMONSQUEEZY_WEBHOOK_SECRET` | Signing secret for `POST /api/webhooks/lemonsqueezy`. |
 
-If the public checkout URL is set, the client opens it with Lemon.js and **does not** need the API key. Variant-based checkout is a fallback: when API key + store + variant ids are present, `POST /api/checkout` `{ "plan": "onetime" \| "monthly" }` creates a checkout and returns `{ "url" }` for the overlay.
+If the public checkout URL is set (or the built-in $48 default is used), the client opens it with Lemon.js and **does not** need the API key. Variant-based checkout is a fallback: when API key + store + variant ids are present, `POST /api/checkout` `{ "plan": "onetime" \| "monthly" }` creates a checkout and returns `{ "url" }` for the overlay.
 
 ### Webhook (future server entitlement)
 
@@ -84,7 +84,7 @@ localStorage.setItem("invoice-pro-v1", "1");
 
 1. Import this GitHub repo in [Vercel](https://vercel.com/new).
 2. Framework preset: **Next.js**. Build command `npm run build`, output is the default Next.js output.
-3. Add the Lemon env vars above (at least `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` for overlay checkout).
+3. Overlay checkout works without env vars (the $48 buy URL is the code default). Optionally set `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` to override, plus server keys for the webhook / API checkout.
 4. After deploy, register the webhook URL in Lemon Squeezy if you want signed `order_created` logs.
 5. The editor itself stays client-side; checkout and webhook routes are the only serverless endpoints.
 
