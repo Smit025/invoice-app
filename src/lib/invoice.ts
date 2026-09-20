@@ -56,11 +56,12 @@ export function createDefaultInvoice(): Invoice {
 }
 
 export function sampleInvoice(templateId: Invoice["templateId"] = "classic"): Invoice {
+  const today = new Date();
   return {
     id: "sample",
     number: "INV-1842",
-    issueDate: "2026-04-02",
-    dueDate: "2026-04-16",
+    issueDate: toISODate(today),
+    dueDate: toISODate(addDays(today, 14)),
     locale: "en-US",
     currency: "USD",
     from: {

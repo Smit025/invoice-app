@@ -31,11 +31,8 @@ export function ClassicTemplate({
 
         <div className="my-6 h-px bg-border" />
 
-        <div className="mb-6 grid grid-cols-2 gap-6">
+        <div className="mb-6">
           <PartyBlock label="Bill to" party={invoice.to} />
-          <div className="text-right text-[12px] leading-4 text-muted">
-            {invoice.currency} · {invoice.locale === "en-GB" ? "DD/MM/YYYY" : "MM/DD/YYYY"}
-          </div>
         </div>
 
         <LineTable invoice={invoice} totals={totals} variant="classic" />

@@ -36,19 +36,9 @@ export function LineItemsEditor({
 
   return (
     <div className="space-y-3">
-      <div className="hidden grid-cols-[1fr_72px_96px_96px_40px] gap-2 text-[12px] font-medium uppercase tracking-[0.06em] text-muted sm:grid">
-        <span>Description</span>
-        <span className="text-right">Qty</span>
-        <span className="text-right">Rate</span>
-        <span className="text-right">Amount</span>
-        <span className="sr-only">Remove</span>
-      </div>
       {invoice.items.map((item, index) => (
-        <div
-          key={item.id}
-          className="grid grid-cols-2 gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_72px_96px_96px_40px] sm:border-0 sm:p-0"
-        >
-          <label className="col-span-2 sm:col-span-1">
+        <div key={item.id} className="space-y-2 rounded-lg border border-border p-3">
+          <label>
             <span className="sr-only">Line {index + 1} description</span>
             <Input
               value={item.description}
@@ -57,56 +47,7 @@ export function LineItemsEditor({
             />
           </label>
           {showHsn ? (
-            <label className="col-span-2 sm:col-span-1 sm:hidden">
-              <span className="mb-1 block text-xs text-muted">HSN</span>
-              <Input
-                value={item.hsn ?? ""}
-                onChange={(e) => updateItem(item.id, { hsn: e.target.value })}
-                placeholder="HSN (optional)"
-              />
-            </label>
-          ) : null}
-          <label>
-            <span className="sr-only">Quantity</span>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={item.qty}
-              onChange={(e) => updateItem(item.id, { qty: Number(e.target.value) })}
-              className="tabular text-right"
-            />
-          </label>
-          <label>
-            <span className="sr-only">Rate</span>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={item.rate}
-              onChange={(e) => updateItem(item.id, { rate: Number(e.target.value) })}
-              className="tabular text-right"
-            />
-          </label>
-          <p className="tabular flex h-10 items-center justify-end text-sm">
-            {formatMoney(
-              totals.items.find((row) => row.id === item.id)?.amount ?? 0,
-              invoice.currency,
-              invoice.locale,
-            )}
-          </p>
-          <button
-            type="button"
-            onClick={() => removeItem(item.id)}
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-muted hover:text-danger"
-            aria-label={`Remove line ${index + 1}`}
-          >
-            ×
-          </button>
-          {showHsn ? (
-            <label className="col-span-2 hidden sm:block">
+            <label>
               <span className="sr-only">HSN</span>
               <Input
                 value={item.hsn ?? ""}
@@ -115,6 +56,48 @@ export function LineItemsEditor({
               />
             </label>
           ) : null}
+          <div className="grid grid-cols-[1fr_1fr_1fr_40px] items-end gap-2">
+            <label>
+              <span className="mb-1 block text-[11px] text-muted">Qty</span>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={item.qty}
+                onChange={(e) => updateItem(item.id, { qty: Number(e.target.value) })}
+                className="tabular text-right"
+              />
+            </label>
+            <label>
+              <span className="mb-1 block text-[11px] text-muted">Rate</span>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={item.rate}
+                onChange={(e) => updateItem(item.id, { rate: Number(e.target.value) })}
+                className="tabular text-right"
+              />
+            </label>
+            <p className="tabular pb-2 text-right text-sm">
+              <span className="mb-1 block text-[11px] text-muted">Amount</span>
+              {formatMoney(
+                totals.items.find((row) => row.id === item.id)?.amount ?? 0,
+                invoice.currency,
+                invoice.locale,
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => removeItem(item.id)}
+              className="mb-0.5 flex h-10 w-10 items-center justify-center rounded-lg text-muted hover:text-danger"
+              aria-label={`Remove line ${index + 1}`}
+            >
+              ×
+            </button>
+          </div>
         </div>
       ))}
       <Button

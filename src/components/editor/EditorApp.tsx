@@ -58,13 +58,16 @@ export function EditorApp() {
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg">
-      <header className="flex h-14 items-center justify-between gap-3 border-b border-border px-4 lg:px-6">
+      <header className="flex h-14 items-center justify-between gap-2 border-b border-border px-3 md:px-6">
         <Link href="/" className="shrink-0">
-          <BrandMark />
+          <BrandMark compact className="md:hidden" />
+          <span className="hidden md:inline">
+            <BrandMark />
+          </span>
         </Link>
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex min-w-0 items-center gap-1 md:gap-2">
           {isPro && drafts.length > 0 ? (
-            <label className="hidden sm:block">
+            <label className="hidden md:block">
               <span className="sr-only">Drafts</span>
               <select
                 className="h-10 max-w-[140px] rounded-lg border border-border-strong bg-bg px-2 text-sm"
@@ -81,28 +84,39 @@ export function EditorApp() {
           ) : (
             <Button
               variant="ghost"
-              className="hidden sm:inline-flex"
+              className="hidden md:inline-flex"
               onClick={() => openPaywall("drafts")}
             >
               Drafts
             </Button>
           )}
-          <Button variant="ghost" className="hidden sm:inline-flex" onClick={() => newDraft()}>
+          <Button variant="ghost" className="hidden md:inline-flex" onClick={() => newDraft()}>
             New
           </Button>
           <Button variant="ghost" onClick={() => setTemplatesOpen(true)}>
             Templates
           </Button>
-          <SegmentedControl
-            ariaLabel="Theme"
-            size="sm"
-            value={invoice.theme}
-            onChange={(theme: Theme) => setInvoice({ ...invoice, theme })}
-            options={[
-              { value: "light", label: "Light" },
-              { value: "dark", label: "Dark" },
-            ]}
-          />
+          <Button
+            variant="ghost"
+            className="md:hidden"
+            onClick={() =>
+              setInvoice({ ...invoice, theme: invoice.theme === "dark" ? "light" : "dark" })
+            }
+          >
+            {invoice.theme === "dark" ? "Light" : "Dark"}
+          </Button>
+          <span className="hidden md:inline-flex">
+            <SegmentedControl
+              ariaLabel="Theme"
+              size="sm"
+              value={invoice.theme}
+              onChange={(theme: Theme) => setInvoice({ ...invoice, theme })}
+              options={[
+                { value: "light", label: "Light" },
+                { value: "dark", label: "Dark" },
+              ]}
+            />
+          </span>
           <Button className="hidden lg:inline-flex" onClick={onPdf} disabled={exporting}>
             {exporting ? "Preparing…" : "Download PDF"}
           </Button>

@@ -58,7 +58,7 @@ export function LineTable({
 }) {
   const showHsn = invoice.taxMode === "gst";
   const rows = totals.items.length > 0 ? totals.items : invoice.items;
-  const filled = rows.filter((row) => row.description.trim() || row.qty || row.rate);
+        const filled = rows.filter((row) => row.description.trim() || row.rate > 0);
 
   return (
     <table className="w-full border-collapse text-left text-[12px] leading-4">

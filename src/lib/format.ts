@@ -62,12 +62,13 @@ export function dueStatus(
 export function formatAddressLines(
   party: Invoice["from"],
 ): string[] {
-  return [
-    party.address1,
-    party.address2,
-    [party.city, party.region, party.postal].filter(Boolean).join(", "),
-    party.country,
-  ].filter((line): line is string => Boolean(line && line.trim()));
+  const locality = [party.city, party.region, party.postal].filter(Boolean).join(", ");
+  const hasBody = Boolean(
+    party.name?.trim() || party.address1?.trim() || party.address2?.trim() || locality,
+  );
+  const lines = [party.address1, party.address2, locality];
+  if (hasBody && party.country) lines.push(party.country);
+  return lines.filter((line): line is string => Boolean(line && String(line).trim()));
 }
 
 export function invoiceHasLiveData(invoice: Invoice): boolean {

@@ -21,22 +21,24 @@ function MiniInvoice({ templateId }: { templateId: TemplateId }) {
 export function LandingPage() {
   return (
     <div className="min-h-dvh bg-bg text-text">
-      <header className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <BrandMark />
-        <nav className="hidden items-center gap-6 text-sm text-muted sm:flex">
-          <a href="#templates" className="hover:text-text">
-            Templates
-          </a>
-          <a href="#pricing" className="hover:text-text">
-            Pricing
-          </a>
-          <Link href="/app" className="font-medium text-text">
-            Create invoice
+      <header className="sticky top-0 z-20 border-b border-border bg-bg/90 backdrop-blur-sm">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <BrandMark />
+          <nav className="hidden items-center gap-6 text-sm text-muted sm:flex">
+            <a href="#templates" className="hover:text-text">
+              Templates
+            </a>
+            <a href="#pricing" className="hover:text-text">
+              Pricing
+            </a>
+            <Link href="/app" className="font-medium text-text">
+              Create invoice
+            </Link>
+          </nav>
+          <Link href="/app" className="sm:hidden">
+            <Button>Create</Button>
           </Link>
-        </nav>
-        <Link href="/app" className="sm:hidden">
-          <Button>Create</Button>
-        </Link>
+        </div>
       </header>
 
       <main>
