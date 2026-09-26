@@ -3,8 +3,10 @@ import type { CheckoutPlan, EnvMap } from "./lemon-config";
 export type LemonServerConfig = {
   apiKey: string;
   storeId: string;
-  variantId: string;
+  /** Monthly subscription variant (VARIANT_ID_MONTHLY, else legacy VARIANT_ID). */
   monthlyVariantId: string;
+  /** Yearly subscription variant (VARIANT_ID_YEARLY). */
+  yearlyVariantId: string;
   webhookSecret: string;
 };
 
@@ -13,11 +15,15 @@ function trimEnv(value: string | undefined): string {
 }
 
 export function getLemonServerConfig(env: EnvMap = process.env): LemonServerConfig {
+  // VARIANT_ID is the legacy one-time id, kept as a temporary monthly fallback.
+  // Replace both with Live subscription variant ids after Lemon store approval.
+  const monthlyVariantId =
+    trimEnv(env.LEMONSQUEEZY_VARIANT_ID_MONTHLY) || trimEnv(env.LEMONSQUEEZY_VARIANT_ID);
   return {
     apiKey: trimEnv(env.LEMONSQUEEZY_API_KEY),
     storeId: trimEnv(env.LEMONSQUEEZY_STORE_ID),
-    variantId: trimEnv(env.LEMONSQUEEZY_VARIANT_ID),
-    monthlyVariantId: trimEnv(env.LEMONSQUEEZY_VARIANT_ID_MONTHLY),
+    monthlyVariantId,
+    yearlyVariantId: trimEnv(env.LEMONSQUEEZY_VARIANT_ID_YEARLY),
     webhookSecret: trimEnv(env.LEMONSQUEEZY_WEBHOOK_SECRET),
   };
 }
@@ -27,14 +33,14 @@ export function isApiCheckoutConfigured(
   config: LemonServerConfig = getLemonServerConfig(),
 ): boolean {
   if (!config.apiKey || !config.storeId) return false;
-  return plan === "monthly" ? Boolean(config.monthlyVariantId) : Boolean(config.variantId);
+  return plan === "yearly" ? Boolean(config.yearlyVariantId) : Boolean(config.monthlyVariantId);
 }
 
 export function variantIdForPlan(
   plan: CheckoutPlan,
   config: LemonServerConfig = getLemonServerConfig(),
 ): string | undefined {
-  const id = plan === "monthly" ? config.monthlyVariantId : config.variantId;
+  const id = plan === "yearly" ? config.yearlyVariantId : config.monthlyVariantId;
   return id || undefined;
 }
 
@@ -116,5 +122,5 @@ export function extractCheckoutUrl(payload: unknown): string | undefined {
 }
 
 export function parseCheckoutPlan(value: unknown): CheckoutPlan | undefined {
-  return value === "onetime" || value === "monthly" ? value : undefined;
+  return value === "monthly" || value === "yearly" ? value : undefined;
 }

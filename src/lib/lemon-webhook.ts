@@ -1,6 +1,23 @@
 import crypto from "node:crypto";
 
-export const LEMON_ENTITLEMENT_EVENTS = ["order_created", "license_key_created"] as const;
+/** Existing order / license events. Still logged; subscription billing does not replace them. */
+export const LEMON_ORDER_EVENTS = ["order_created", "license_key_created"] as const;
+
+/**
+ * Subscription lifecycle events for the $4.99/mo and $39/yr plans.
+ * Logged only — this app has no user store, so these do not grant or revoke Pro.
+ */
+export const LEMON_SUBSCRIPTION_EVENTS = [
+  "subscription_created",
+  "subscription_updated",
+  "subscription_cancelled",
+  "subscription_payment_success",
+] as const;
+
+export const LEMON_ENTITLEMENT_EVENTS = [
+  ...LEMON_ORDER_EVENTS,
+  ...LEMON_SUBSCRIPTION_EVENTS,
+] as const;
 
 export type LemonEntitlementEvent = (typeof LEMON_ENTITLEMENT_EVENTS)[number];
 
@@ -36,10 +53,11 @@ export function getLemonEventName(payload: unknown): string | undefined {
   return typeof eventName === "string" ? eventName : undefined;
 }
 
-export function isLemonEntitlementEvent(eventName: string | undefined): eventName is LemonEntitlementEvent {
-  return (
-    eventName === "order_created" || eventName === "license_key_created"
-  );
+export function isLemonEntitlementEvent(
+  eventName: string | undefined,
+): eventName is LemonEntitlementEvent {
+  if (!eventName) return false;
+  return (LEMON_ENTITLEMENT_EVENTS as readonly string[]).includes(eventName);
 }
 
 export function summarizeLemonWebhook(payload: unknown): {

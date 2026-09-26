@@ -12,7 +12,7 @@ const jsonLd = {
   offers: {
     "@type": "AggregateOffer",
     lowPrice: "0",
-    highPrice: String(PRICING.oneTime),
+    highPrice: String(PRICING.yearly),
     priceCurrency: "USD",
   },
 };

@@ -39,6 +39,11 @@ export async function POST(request: NextRequest) {
   const eventName = getLemonEventName(payload);
   const summary = summarizeLemonWebhook(payload);
 
+  // Log order events (order_created, license_key_created) and subscription events
+  // (subscription_created, subscription_updated, subscription_cancelled,
+  // subscription_payment_success). No user store: nothing here grants or revokes
+  // Pro. subscription_cancelled is logged only. Client unlock stays on
+  // Lemon.js Checkout.Success → localStorage invoice-pro-v1 = "1".
   if (isLemonEntitlementEvent(eventName)) {
     console.info("[lemonsqueezy webhook]", eventName, {
       id: summary.id,

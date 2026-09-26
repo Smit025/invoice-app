@@ -6,7 +6,7 @@ import { getLemonPublicConfig, resolvePaywallCheckout } from "@/lib/lemon-config
 import { unlockProLocally } from "@/lib/pro";
 import { showToast } from "@/lib/toast";
 
-type ApiCapabilities = { oneTime: boolean; monthly: boolean };
+type ApiCapabilities = { monthly: boolean; yearly: boolean };
 
 function getLemonOpen(): ((url: string) => void) | undefined {
   if (typeof window === "undefined") return undefined;
@@ -34,44 +34,44 @@ async function openLemonOverlay(url: string): Promise<void> {
 
 async function fetchApiCapabilities(): Promise<ApiCapabilities> {
   const response = await fetch("/api/checkout", { cache: "no-store" });
-  if (!response.ok) return { oneTime: false, monthly: false };
+  if (!response.ok) return { monthly: false, yearly: false };
   const payload: unknown = await response.json();
-  if (!payload || typeof payload !== "object") return { oneTime: false, monthly: false };
-  const record = payload as { oneTime?: unknown; monthly?: unknown };
+  if (!payload || typeof payload !== "object") return { monthly: false, yearly: false };
+  const record = payload as { monthly?: unknown; yearly?: unknown };
   return {
-    oneTime: Boolean(record.oneTime),
     monthly: Boolean(record.monthly),
+    yearly: Boolean(record.yearly),
   };
 }
 
 export function useLemonCheckout() {
   const publicConfig = getLemonPublicConfig();
   const [api, setApi] = useState<ApiCapabilities | null>(
-    publicConfig.oneTimeUrl && publicConfig.monthlyUrl ? { oneTime: true, monthly: true } : null,
+    publicConfig.monthlyUrl && publicConfig.yearlyUrl ? { monthly: true, yearly: true } : null,
   );
   const [opening, setOpening] = useState(false);
-  const hasPublicUrl = Boolean(publicConfig.oneTimeUrl || publicConfig.monthlyUrl);
+  const hasPublicUrl = Boolean(publicConfig.monthlyUrl || publicConfig.yearlyUrl);
 
   useEffect(() => {
-    if (publicConfig.oneTimeUrl && publicConfig.monthlyUrl) return;
+    if (publicConfig.monthlyUrl && publicConfig.yearlyUrl) return;
     let cancelled = false;
     fetchApiCapabilities()
       .then((next) => {
         if (!cancelled) setApi(next);
       })
       .catch(() => {
-        if (!cancelled) setApi({ oneTime: false, monthly: false });
+        if (!cancelled) setApi({ monthly: false, yearly: false });
       });
     return () => {
       cancelled = true;
     };
-  }, [publicConfig.monthlyUrl, publicConfig.oneTimeUrl]);
+  }, [publicConfig.monthlyUrl, publicConfig.yearlyUrl]);
 
   const mode = resolvePaywallCheckout({
-    publicOneTime: publicConfig.oneTimeUrl,
     publicMonthly: publicConfig.monthlyUrl,
-    apiOneTime: api?.oneTime,
+    publicYearly: publicConfig.yearlyUrl,
     apiMonthly: api?.monthly,
+    apiYearly: api?.yearly,
     nodeEnv: process.env.NODE_ENV,
   });
 
@@ -81,8 +81,7 @@ export function useLemonCheckout() {
     async (plan: CheckoutPlan) => {
       setOpening(true);
       try {
-        const publicUrl =
-          plan === "monthly" ? publicConfig.monthlyUrl : publicConfig.oneTimeUrl;
+        const publicUrl = plan === "yearly" ? publicConfig.yearlyUrl : publicConfig.monthlyUrl;
         if (publicUrl) {
           await openLemonOverlay(publicUrl);
           return;
@@ -110,7 +109,7 @@ export function useLemonCheckout() {
         setOpening(false);
       }
     },
-    [publicConfig.monthlyUrl, publicConfig.oneTimeUrl, setOpening],
+    [publicConfig.monthlyUrl, publicConfig.yearlyUrl, setOpening],
   );
 
   const demoUnlock = useCallback(() => {

@@ -46,4 +46,30 @@ describe("POST /api/webhooks/lemonsqueezy", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
+
+  it("returns 200 for subscription lifecycle events without changing the order path", async () => {
+    const secret = "whsec_test";
+    vi.stubEnv("LEMONSQUEEZY_WEBHOOK_SECRET", secret);
+    const events = [
+      "subscription_created",
+      "subscription_updated",
+      "subscription_cancelled",
+      "subscription_payment_success",
+    ];
+
+    for (const eventName of events) {
+      const body = JSON.stringify({
+        meta: { event_name: eventName },
+        data: { id: "sub_1", type: "subscriptions" },
+      });
+      const request = new NextRequest("http://localhost/api/webhooks/lemonsqueezy", {
+        method: "POST",
+        body,
+        headers: { "X-Signature": sign(body, secret) },
+      });
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ ok: true });
+    }
+  });
 });
