@@ -7,6 +7,8 @@ import { showToast } from "@/lib/toast";
 const LEMON_JS_SRC = "https://assets.lemonsqueezy.com/lemon.js";
 
 function handleLemonEvent(event: { event: string }): void {
+  // Monthly and yearly subscription overlays both emit Checkout.Success.
+  // Same device-local unlock as before: localStorage invoice-pro-v1 = "1".
   if (event.event !== "Checkout.Success") return;
   unlockProLocally();
   showToast("Pro unlocked. Watermark and logo limits are off on this device.");

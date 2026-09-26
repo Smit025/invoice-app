@@ -7,7 +7,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: `Free invoice maker with watermark, or Pro for $${PRICING.oneTime} one-time / $${PRICING.monthly} per month.`,
+  description: `Free invoice maker with watermark, or Pro for $${PRICING.monthly}/mo or $${PRICING.yearly}/yr.`,
 };
 
 export default function PricingPage() {
@@ -27,11 +27,14 @@ export default function PricingPage() {
             </p>
           </div>
           <div className="rounded-xl border border-accent p-5">
-            <p className="font-semibold text-accent">
-              Pro — ${PRICING.oneTime} one-time
+            <p className="font-semibold text-accent">Pro</p>
+            <p className="mt-2 text-[28px] font-semibold leading-9">
+              ${PRICING.monthly}
+              <span className="text-base font-medium text-muted">/mo</span>
             </p>
-            <p className="mt-1 text-sm text-muted">
-              {`No watermark, logo upload, unlimited drafts on this device. Optional $${PRICING.monthly}/mo.`}
+            <p className="text-sm text-muted">or ${PRICING.yearly}/yr — save</p>
+            <p className="mt-2 text-sm text-muted">
+              No watermark, logo upload, unlimited local drafts on this device.
             </p>
             <div className="mt-4">
               <CheckoutButtons />

@@ -2,16 +2,37 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createLemonCheckout,
   extractCheckoutUrl,
+  getLemonServerConfig,
   isApiCheckoutConfigured,
   parseCheckoutPlan,
 } from "./lemon-server";
 
 describe("parseCheckoutPlan", () => {
-  it("accepts onetime and monthly only", () => {
-    expect(parseCheckoutPlan("onetime")).toBe("onetime");
+  it("accepts monthly and yearly subscriptions only", () => {
     expect(parseCheckoutPlan("monthly")).toBe("monthly");
-    expect(parseCheckoutPlan("yearly")).toBeUndefined();
+    expect(parseCheckoutPlan("yearly")).toBe("yearly");
+    expect(parseCheckoutPlan("onetime")).toBeUndefined();
     expect(parseCheckoutPlan(undefined)).toBeUndefined();
+  });
+});
+
+describe("getLemonServerConfig", () => {
+  it("uses the legacy variant id as the monthly fallback", () => {
+    expect(
+      getLemonServerConfig({
+        LEMONSQUEEZY_VARIANT_ID: "legacy",
+        LEMONSQUEEZY_VARIANT_ID_YEARLY: "yr",
+      }),
+    ).toMatchObject({ monthlyVariantId: "legacy", yearlyVariantId: "yr" });
+  });
+
+  it("prefers the monthly variant id over the legacy alias", () => {
+    expect(
+      getLemonServerConfig({
+        LEMONSQUEEZY_VARIANT_ID: "legacy",
+        LEMONSQUEEZY_VARIANT_ID_MONTHLY: "month",
+      }).monthlyVariantId,
+    ).toBe("month");
   });
 });
 
@@ -19,18 +40,16 @@ describe("isApiCheckoutConfigured", () => {
   const base = {
     apiKey: "key",
     storeId: "1",
-    variantId: "10",
-    monthlyVariantId: "",
+    monthlyVariantId: "10",
+    yearlyVariantId: "",
     webhookSecret: "",
   };
 
   it("requires api key, store, and the variant for that plan", () => {
-    expect(isApiCheckoutConfigured("onetime", base)).toBe(true);
-    expect(isApiCheckoutConfigured("monthly", base)).toBe(false);
-    expect(isApiCheckoutConfigured("onetime", { ...base, apiKey: "" })).toBe(false);
-    expect(
-      isApiCheckoutConfigured("monthly", { ...base, monthlyVariantId: "11" }),
-    ).toBe(true);
+    expect(isApiCheckoutConfigured("monthly", base)).toBe(true);
+    expect(isApiCheckoutConfigured("yearly", base)).toBe(false);
+    expect(isApiCheckoutConfigured("monthly", { ...base, apiKey: "" })).toBe(false);
+    expect(isApiCheckoutConfigured("yearly", { ...base, yearlyVariantId: "11" })).toBe(true);
   });
 });
 
@@ -41,13 +60,13 @@ describe("createLemonCheckout", () => {
 
   it("returns 503 when the API is not configured", async () => {
     const result = await createLemonCheckout({
-      plan: "onetime",
+      plan: "monthly",
       origin: "http://localhost:3000",
       config: {
         apiKey: "",
         storeId: "",
-        variantId: "",
         monthlyVariantId: "",
+        yearlyVariantId: "",
         webhookSecret: "",
       },
     });
@@ -67,13 +86,13 @@ describe("createLemonCheckout", () => {
     });
 
     const result = await createLemonCheckout({
-      plan: "onetime",
+      plan: "monthly",
       origin: "https://invoice.example",
       config: {
         apiKey: "key",
         storeId: "2",
-        variantId: "99",
-        monthlyVariantId: "",
+        monthlyVariantId: "99",
+        yearlyVariantId: "",
         webhookSecret: "",
       },
       fetchImpl: fetchImpl as unknown as typeof fetch,
@@ -95,6 +114,39 @@ describe("createLemonCheckout", () => {
     expect(body.data.attributes.product_options.redirect_url).toBe(
       "https://invoice.example/thanks?pro=1",
     );
+    expect(body.data.relationships).toEqual({
+      store: { data: { type: "stores", id: "2" } },
+      variant: { data: { type: "variants", id: "99" } },
+    });
+  });
+
+  it("posts the yearly subscription variant id", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: { attributes: { url: "https://store.lemonsqueezy.com/checkout/custom/year" } },
+      }),
+    });
+
+    const result = await createLemonCheckout({
+      plan: "yearly",
+      origin: "https://invoice.example",
+      config: {
+        apiKey: "key",
+        storeId: "2",
+        monthlyVariantId: "99",
+        yearlyVariantId: "100",
+        webhookSecret: "",
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.ok).toBe(true);
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as {
+      data: { relationships: { variant: { data: { id: string } } } };
+    };
+    expect(body.data.relationships.variant.data.id).toBe("100");
   });
 
   it("extracts checkout URLs from JSON:API payloads", () => {

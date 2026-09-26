@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
 function checkoutCapabilities() {
   const config = getLemonServerConfig();
   return {
-    oneTime: isApiCheckoutConfigured("onetime", config),
     monthly: isApiCheckoutConfigured("monthly", config),
+    yearly: isApiCheckoutConfigured("yearly", config),
   };
 }
 
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   );
   if (!plan) {
     return NextResponse.json(
-      { error: "plan must be \"onetime\" or \"monthly\"" },
+      { error: "plan must be \"monthly\" or \"yearly\"" },
       { status: 400 },
     );
   }

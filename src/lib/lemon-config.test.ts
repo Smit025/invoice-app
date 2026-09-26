@@ -11,76 +11,101 @@ describe("getPublicCheckoutUrl", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
   });
-  it("prefers NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL over the deprecated alias", () => {
+
+  it("prefers the primary monthly URL over aliases, and reads yearly separately", () => {
     const env = {
-      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: " https://buy.lemon/one ",
+      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: " https://buy.lemon/month ",
+      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: "https://buy.lemon/month-alias",
       NEXT_PUBLIC_CHECKOUT_URL: "https://buy.lemon/old",
-      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: "https://buy.lemon/mo",
+      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_YEARLY: " https://buy.lemon/year ",
     };
 
-    expect(getPublicCheckoutUrl("onetime", env)).toBe("https://buy.lemon/one");
-    expect(getPublicCheckoutUrl("monthly", env)).toBe("https://buy.lemon/mo");
+    expect(getPublicCheckoutUrl("monthly", env)).toBe("https://buy.lemon/month");
+    expect(getPublicCheckoutUrl("yearly", env)).toBe("https://buy.lemon/year");
   });
 
-  it("falls back to NEXT_PUBLIC_CHECKOUT_URL for one-time", () => {
+  it("uses the monthly alias when the primary URL is unset", () => {
+    const env = {
+      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: "https://buy.lemon/month-alias",
+    };
+    expect(getPublicCheckoutUrl("monthly", env)).toBe("https://buy.lemon/month-alias");
+    expect(getPublicCheckoutUrl("yearly", env)).toBeUndefined();
+  });
+
+  it("falls back to NEXT_PUBLIC_CHECKOUT_URL for monthly", () => {
     const env = { NEXT_PUBLIC_CHECKOUT_URL: "https://buy.lemon/old" };
-    expect(getPublicCheckoutUrl("onetime", env)).toBe("https://buy.lemon/old");
-    expect(getPublicCheckoutUrl("monthly", env)).toBeUndefined();
+    expect(getPublicCheckoutUrl("monthly", env)).toBe("https://buy.lemon/old");
+    expect(getPublicCheckoutUrl("yearly", env)).toBeUndefined();
   });
 
-  it("defaults to the public $7.99 Lemon buy URL when the env var is unset", () => {
-    delete process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL;
-    delete process.env.NEXT_PUBLIC_CHECKOUT_URL;
-    expect(getLemonPublicConfig().oneTimeUrl).toBe(DEFAULT_LEMONSQUEEZY_CHECKOUT_URL);
+  it("does not apply the temporary default when an explicit env map has no URL", () => {
+    expect(getPublicCheckoutUrl("monthly", {})).toBeUndefined();
   });
 
-  it("lets NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL override the default", () => {
-    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL", "https://buy.lemon/live");
-    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY", "https://buy.lemon/mo-live");
+  it("defaults to the temporary Lemon buy URL when subscription env vars are unset", () => {
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY", "");
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_YEARLY", "");
+    vi.stubEnv("NEXT_PUBLIC_CHECKOUT_URL", "");
     expect(getLemonPublicConfig()).toEqual({
-      oneTimeUrl: "https://buy.lemon/live",
-      monthlyUrl: "https://buy.lemon/mo-live",
+      monthlyUrl: DEFAULT_LEMONSQUEEZY_CHECKOUT_URL,
+      yearlyUrl: undefined,
     });
+  });
+
+  it("lets subscription env vars override the temporary default", () => {
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL", "https://buy.lemon/live-mo");
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_YEARLY", "https://buy.lemon/live-yr");
+    expect(getLemonPublicConfig()).toEqual({
+      monthlyUrl: "https://buy.lemon/live-mo",
+      yearlyUrl: "https://buy.lemon/live-yr",
+    });
+  });
+
+  it("uses the monthly alias over the temporary default", () => {
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY", "https://buy.lemon/alias");
+    expect(getLemonPublicConfig().monthlyUrl).toBe("https://buy.lemon/alias");
   });
 });
 
 describe("resolvePaywallCheckout", () => {
-  it("uses Lemon CTAs when a public one-time URL is set", () => {
+  it("uses Lemon CTAs when a public monthly URL is set", () => {
     expect(
       resolvePaywallCheckout({
-        publicOneTime: "https://buy.lemon/one",
+        publicMonthly: "https://buy.lemon/mo",
         nodeEnv: "development",
       }),
-    ).toEqual({ oneTimeEnabled: true, monthlyEnabled: false, fallback: "lemon" });
+    ).toEqual({ monthlyEnabled: true, yearlyEnabled: false, fallback: "lemon" });
   });
 
-  it("shows monthly when a monthly URL or API variant is present", () => {
+  it("shows yearly when a yearly URL or API variant is present", () => {
     expect(
       resolvePaywallCheckout({
-        publicOneTime: "https://buy.lemon/one",
         publicMonthly: "https://buy.lemon/mo",
+        publicYearly: "https://buy.lemon/yr",
         nodeEnv: "production",
       }),
-    ).toEqual({ oneTimeEnabled: true, monthlyEnabled: true, fallback: "lemon" });
+    ).toEqual({ monthlyEnabled: true, yearlyEnabled: true, fallback: "lemon" });
 
     expect(
       resolvePaywallCheckout({
-        apiOneTime: true,
         apiMonthly: true,
+        apiYearly: true,
         nodeEnv: "production",
       }),
-    ).toEqual({ oneTimeEnabled: true, monthlyEnabled: true, fallback: "lemon" });
+    ).toEqual({ monthlyEnabled: true, yearlyEnabled: true, fallback: "lemon" });
   });
 
   it("falls back to demo only in development when Lemon is not configured", () => {
     expect(resolvePaywallCheckout({ nodeEnv: "development" })).toEqual({
-      oneTimeEnabled: false,
       monthlyEnabled: false,
+      yearlyEnabled: false,
       fallback: "demo",
     });
     expect(resolvePaywallCheckout({ nodeEnv: "production" })).toEqual({
-      oneTimeEnabled: false,
       monthlyEnabled: false,
+      yearlyEnabled: false,
       fallback: "soon",
     });
   });

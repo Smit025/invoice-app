@@ -43,7 +43,8 @@ export function CheckoutButtons({
   if (mode.fallback === "demo") {
     return (
       <div className="flex flex-col gap-2">
-        <Button onClick={demoUnlock}>Unlock Pro — ${PRICING.oneTime} (demo)</Button>
+        <Button onClick={demoUnlock}>Unlock Pro — ${PRICING.monthly}/mo (demo)</Button>
+        <p className="text-center text-sm text-muted">or ${PRICING.yearly}/yr — save</p>
         {onContinueFree ? (
           <Button variant="ghost" onClick={onContinueFree}>
             Continue free
@@ -58,18 +59,18 @@ export function CheckoutButtons({
 
   return (
     <div className="flex flex-col gap-2">
-      {mode.oneTimeEnabled ? (
-        <Button onClick={() => void openCheckout("onetime")} disabled={opening}>
-          {opening ? "Opening checkout…" : `Unlock Pro — $${PRICING.oneTime}`}
+      {mode.monthlyEnabled ? (
+        <Button onClick={() => void openCheckout("monthly")} disabled={opening}>
+          {opening ? "Opening checkout…" : `Unlock Pro — $${PRICING.monthly}/mo`}
         </Button>
       ) : null}
-      {mode.monthlyEnabled ? (
+      {mode.yearlyEnabled ? (
         <Button
-          variant={mode.oneTimeEnabled ? "secondary" : "primary"}
-          onClick={() => void openCheckout("monthly")}
+          variant={mode.monthlyEnabled ? "secondary" : "primary"}
+          onClick={() => void openCheckout("yearly")}
           disabled={opening}
         >
-          {opening ? "Opening checkout…" : `Subscribe monthly — $${PRICING.monthly}`}
+          {opening ? "Opening checkout…" : `Save with yearly — $${PRICING.yearly}/yr`}
         </Button>
       ) : null}
       {onContinueFree ? (

@@ -20,9 +20,10 @@ export const LOCALES: Array<{ code: "en-US" | "en-GB"; label: string }> = [
 
 export const GST_RATES = [0, 5, 12, 18, 28] as const;
 
+/** EU + US soft-launch subscription prices. */
 export const PRICING = {
-  oneTime: 7.99,
-  monthly: 2.99,
+  monthly: 4.99,
+  yearly: 39,
 } as const;
 
 export const TEMPLATES: Array<{
