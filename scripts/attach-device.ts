@@ -7,9 +7,13 @@ import { attachDevice, parseAttachArgs } from "../src/lib/attach-device.ts";
  * VERCEL_ENV, UPSTASH_REDIS_REST_URL, and UPSTASH_REDIS_REST_TOKEN must be set.
  * An empty VERCEL_ENV is refused so this cannot write inv:local: by mistake.
  *
- * node --experimental-strip-types scripts/attach-device.ts \
+ * npx tsx scripts/attach-device.ts \
  *   --subscription sub_123 --install <32 hex> --order <lemon order id>
  */
+
+const USAGE =
+  "Usage: npx tsx scripts/attach-device.ts --subscription <id> --install <32 hex> --order <lemon order id>";
+
 async function upstash(env: Record<string, string | undefined>, args: string[]): Promise<unknown> {
   const url = (env.UPSTASH_REDIS_REST_URL ?? env.KV_REST_API_URL)?.trim();
   const token = (env.UPSTASH_REDIS_REST_TOKEN ?? env.KV_REST_API_TOKEN)?.trim();
@@ -29,11 +33,13 @@ async function upstash(env: Record<string, string | undefined>, args: string[]):
 }
 
 export async function main(argv: string[], env: Record<string, string | undefined> = process.env): Promise<number> {
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(USAGE);
+    return 0;
+  }
   const parsed = parseAttachArgs(argv);
   if (!parsed) {
-    console.error(
-      "Usage: node --experimental-strip-types scripts/attach-device.ts --subscription <id> --install <32 hex> --order <lemon order id>",
-    );
+    console.error(USAGE);
     return 1;
   }
   const result = await attachDevice({

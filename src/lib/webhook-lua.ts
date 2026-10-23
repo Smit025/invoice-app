@@ -15,15 +15,11 @@
  *
  * ARGV[1] is the key prefix (`inv:<vercel-env>:`). ARGV[2] is the event TTL
  * in seconds. ARGV[3] is the webhook spec JSON.
+ *
+ * `LUA_HELPERS` is shared with the attach-device script. Both close over
+ * `prefix`. `pointUser` picks the best subscription for an install id.
  */
-export const WEBHOOK_LUA = `
--- Redis does not roll back writes when a Lua script errors. This claim stays
--- unless the store DELs it after the HTTP call itself fails.
-local prefix = ARGV[1]
-local ttl = tonumber(ARGV[2]) or 0
-local spec = cjson.decode(ARGV[3])
-local nowMs = tonumber(spec.nowMs) or 0
-
+const LUA_HELPERS = `
 local function str(value)
   if value == nil or value == cjson.null then return "" end
   if type(value) ~= "string" then return "" end
@@ -172,7 +168,16 @@ local function devicesOf(rec)
   if #list == 0 and str(rec.userId) ~= "" then table.insert(list, str(rec.userId)) end
   return list
 end
+`;
 
+export const WEBHOOK_LUA = `
+-- Redis does not roll back writes when a Lua script errors. This claim stays
+-- unless the store DELs it after the HTTP call itself fails.
+local prefix = ARGV[1]
+local ttl = tonumber(ARGV[2]) or 0
+local spec = cjson.decode(ARGV[3])
+local nowMs = tonumber(spec.nowMs) or 0
+${LUA_HELPERS}
 local function done(result, action, reason, variantId)
   return cjson.encode({
     result = result,
@@ -231,15 +236,25 @@ if existing ~= nil then
   local stale = false
   if incomingMs < storedMs then
     stale = true
-  elseif incomingMs == storedMs then
+    elseif incomingMs == storedMs then
     local incomingPrec = tonumber(spec.precedence) or 0
     local storedPrec = tonumber(existing.precedence) or 0
     if incomingPrec < storedPrec then
       stale = true
     elseif incomingPrec == storedPrec then
-      local incomingId = str(spec.eventId)
-      local storedId = str(existing.eventId)
-      if incomingId <= storedId then stale = true end
+      -- payment_success stays precedence 10. A higher rank would make the
+      -- same-second renewal stale, so renews_at would never be stored.
+      local clearsRefund = existing.refunded == true and spec.action == "grant" and spec.reason == "payment_success"
+      local fillsCleared = false
+      if spec.action == "grant" and spec.reason ~= "payment_success" and (str(spec.renewsAt) ~= "" or str(spec.endsAt) ~= "") then
+        local clearedAt = millis(existing.refundClearedAtMs)
+        if clearedAt ~= nil and clearedAt == incomingMs then fillsCleared = true end
+      end
+      if not clearsRefund and not fillsCleared then
+        local incomingId = str(spec.eventId)
+        local storedId = str(existing.eventId)
+        if incomingId <= storedId then stale = true end
+      end
     end
   end
   if stale then
@@ -301,15 +316,36 @@ if holdRefund then
   active = false
 end
 
-local refunded = existing ~= nil and existing.refunded == true
-if spec.refund == true then refunded = true end
-if spec.action == "grant" and spec.reason == "payment_success" then refunded = false end
-
 local updatedAt = str(spec.eventTime)
 if updatedAt == "" and existing ~= nil then updatedAt = str(existing.updatedAt) end
 local updatedAtMs = millis(spec.updatedAtMs)
 if updatedAtMs == nil and existing ~= nil then updatedAtMs = millis(existing.updatedAtMs) end
 if updatedAtMs == nil then updatedAtMs = 0 end
+
+local refunded = existing ~= nil and existing.refunded == true
+local refundEndsAt = existing and str(existing.refundEndsAt) or ""
+local refundClearedAtMs = existing and millis(existing.refundClearedAtMs) or nil
+if spec.refund == true then
+  refunded = true
+  refundEndsAt = endsAt
+  refundClearedAtMs = nil
+end
+if spec.action == "grant" and spec.reason == "payment_success" then
+  local wasRefunded = refunded
+  refunded = false
+  if wasRefunded and str(spec.endsAt) == "" then
+    if refundEndsAt ~= "" then
+      if endsAt == refundEndsAt then endsAt = "" end
+    elseif renewsAt == "" then
+      endsAt = ""
+    end
+  end
+  if wasRefunded then
+    local untilMs = isoToMs(endsAt) or isoToMs(renewsAt) or 0
+    active = untilMs > nowMs
+    refundClearedAtMs = updatedAtMs
+  end
+end
 
 local record = {
   subscriptionId = subscriptionId,
@@ -324,6 +360,8 @@ local record = {
   updatedAt = updatedAt,
   updatedAtMs = updatedAtMs,
   refunded = refunded,
+  refundEndsAt = refundEndsAt ~= "" and refundEndsAt or cjson.null,
+  refundClearedAtMs = refundClearedAtMs ~= nil and refundClearedAtMs or cjson.null,
   endsAtMs = isoToMs(endsAt) or 0,
   renewsAtMs = isoToMs(renewsAt) or 0,
   precedence = tonumber(spec.precedence) or 0,
@@ -348,3 +386,57 @@ return done("applied", spec.action, spec.reason, variantId)
 `;
 
 export const EVENT_TTL_SECONDS = 60 * 60 * 24 * 45;
+
+/**
+ * One EVAL for support attaching an install id.
+ *
+ * ARGV[1] prefix, ARGV[2] subscription id, ARGV[3] install id, ARGV[4] order
+ * id, ARGV[5] device cap, ARGV[6] now in milliseconds (pointer ranking only;
+ * it is not written onto the subscription). The order check, the refund
+ * check, the cap, and every write happen here, so a refund EVAL cannot be
+ * overwritten by a snapshot taken earlier.
+ */
+export const ATTACH_LUA = `
+local prefix = ARGV[1]
+local nowMs = tonumber(ARGV[6]) or 0
+${LUA_HELPERS}
+local subscriptionId = str(ARGV[2])
+local installId = str(ARGV[3])
+local orderId = str(ARGV[4])
+local cap = tonumber(ARGV[5]) or 0
+
+local function fail(reason)
+  return cjson.encode({ ok = false, reason = reason, devices = {} })
+end
+
+if subscriptionId == "" then return fail("not_found") end
+local raw = redis.call("GET", prefix .. "sub:" .. subscriptionId)
+if not raw then return fail("not_found") end
+local rec = cjson.decode(raw)
+if type(rec) ~= "table" or str(rec.subscriptionId) ~= subscriptionId then return fail("not_found") end
+
+local orderRaw = redis.call("GET", prefix .. "order:" .. orderId)
+if not orderRaw then return fail("order_mismatch") end
+local mapped = cjson.decode(orderRaw)
+if type(mapped) ~= "table" or str(mapped.subscriptionId) ~= subscriptionId then return fail("order_mismatch") end
+
+if rec.refunded == true then return fail("refunded") end
+
+local devices = devicesOf(rec)
+if not contains(devices, installId) then
+  if #devices >= cap then return fail("device_cap") end
+  table.insert(devices, installId)
+end
+local userId = devices[1]
+if userId == nil or userId == "" then return fail("not_found") end
+rec.devices = devices
+rec.userId = userId
+redis.call("SET", prefix .. "sub:" .. subscriptionId, cjson.encode(rec))
+
+local ids = readIndex(installId)
+if not contains(ids, subscriptionId) then table.insert(ids, subscriptionId) end
+writeIndex(installId, ids)
+pointUser(installId, ids, nowMs)
+
+return cjson.encode({ ok = true, reason = "", devices = devices })
+`;

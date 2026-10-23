@@ -1,7 +1,6 @@
 import { entitlementKeyPrefix } from "./entitlement-keys";
-import type { EntitlementRecord } from "./entitlement-store";
-import { deviceIds } from "./webhook-apply";
 import { isInstallUserId } from "./install-id";
+import { ATTACH_LUA } from "./webhook-lua";
 
 export const DEVICE_CAP = 3;
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -12,33 +11,10 @@ export type AttachResult = { ok: true; devices: string[] } | { ok: false; reason
 
 export type RedisCommand = (args: string[]) => Promise<unknown>;
 
-function readRecord(raw: unknown): EntitlementRecord | null {
-  if (typeof raw !== "string" || !raw) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-    return parsed as EntitlementRecord;
-  } catch {
-    return null;
-  }
-}
-
-function mappedSubscription(raw: unknown): string | null {
-  if (typeof raw !== "string" || !raw) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-    const subscriptionId = (parsed as { subscriptionId?: unknown }).subscriptionId;
-    return typeof subscriptionId === "string" && subscriptionId ? subscriptionId : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Append one install id to a subscription after the stored order id matches.
- * A refunded subscription is left alone. Callers pass the Upstash command
- * function so this can run locally against the same keys the webhook writes.
+ * The order check, the refund check, the device cap, and the writes run in
+ * one EVAL. A refund that lands in another EVAL is not overwritten.
  */
 export async function attachDevice(input: {
   env: Record<string, string | undefined>;
@@ -46,6 +22,7 @@ export async function attachDevice(input: {
   installId: string;
   orderId: string;
   command: RedisCommand;
+  nowMs?: number;
 }): Promise<AttachResult> {
   const vercelEnv = input.env.VERCEL_ENV?.trim();
   const url = (input.env.UPSTASH_REDIS_REST_URL ?? input.env.KV_REST_API_URL)?.trim();
@@ -58,43 +35,44 @@ export async function attachDevice(input: {
   }
 
   const prefix = entitlementKeyPrefix(vercelEnv);
-  const subscriptionKey = `${prefix}sub:${input.subscriptionId}`;
-  const orderKey = `${prefix}order:${input.orderId}`;
-  const userKey = `${prefix}user:${installId}`;
-  const indexKey = `${prefix}idx:${installId}`;
-
-  const record = readRecord(await input.command(["GET", subscriptionKey]));
-  if (!record || record.subscriptionId !== input.subscriptionId) return { ok: false, reason: "not_found" };
-  if (mappedSubscription(await input.command(["GET", orderKey])) !== input.subscriptionId) {
-    return { ok: false, reason: "order_mismatch" };
-  }
-  if (record.refunded) return { ok: false, reason: "refunded" };
-
-  const devices = deviceIds(record);
-  if (!devices.includes(installId)) {
-    if (devices.length >= DEVICE_CAP) return { ok: false, reason: "device_cap" };
-    devices.push(installId);
-  }
-
-  const stored: EntitlementRecord = { ...record, devices, userId: devices[0] ?? record.userId };
-  await input.command(["SET", subscriptionKey, JSON.stringify(stored)]);
-  await input.command(["SET", userKey, input.subscriptionId]);
-
-  const index = readRecordList(await input.command(["GET", indexKey]));
-  if (!index.includes(input.subscriptionId)) index.push(input.subscriptionId);
-  await input.command(["SET", indexKey, JSON.stringify(index)]);
-
-  return { ok: true, devices };
+  const raw = await input.command([
+    "EVAL",
+    ATTACH_LUA,
+    "1",
+    `${prefix}hook`,
+    prefix,
+    input.subscriptionId,
+    installId,
+    input.orderId,
+    String(DEVICE_CAP),
+    String(input.nowMs ?? Date.now()),
+  ]);
+  return parseAttachResult(raw);
 }
 
-function readRecordList(raw: unknown): string[] {
-  if (typeof raw !== "string" || !raw) return [];
+function parseAttachResult(raw: unknown): AttachResult {
+  const value = typeof raw === "string" ? parseJson(raw) : raw;
+  if (!value || typeof value !== "object") return { ok: false, reason: "not_found" };
+  const body = value as { ok?: unknown; reason?: unknown; devices?: unknown };
+  if (body.ok === true && Array.isArray(body.devices)) {
+    return { ok: true, devices: body.devices.filter((item): item is string => typeof item === "string") };
+  }
+  if (
+    body.reason === "not_found" ||
+    body.reason === "order_mismatch" ||
+    body.reason === "refunded" ||
+    body.reason === "device_cap"
+  ) {
+    return { ok: false, reason: body.reason };
+  }
+  return { ok: false, reason: "not_found" };
+}
+
+function parseJson(raw: string): unknown {
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is string => typeof item === "string");
+    return JSON.parse(raw);
   } catch {
-    return [];
+    return null;
   }
 }
 

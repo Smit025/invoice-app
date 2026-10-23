@@ -15,7 +15,12 @@ export type PersistResult = {
  * lexicographically greater `meta.webhook_id`.
  *
  * refunded (50) > expired / license_disabled (40) > other revoke (30) >
- * pause / no_extend (20) > grant (10).
+ * pause / no_extend (20) > grant (10). `payment_success` stays a grant.
+ * Raising it would make a same-second renewal stale, so that renewal would
+ * never store `renews_at`. Two exceptions cover that tie instead: a payment
+ * that clears a refund wins the webhook-id comparison, and a grant that
+ * carries `renews_at` or `ends_at` still applies when it shares the
+ * millisecond of the payment that just cleared the refund.
  */
 export function eventPrecedence(input: { action: string; reason: string; status?: string | null }): number {
   if (input.reason === "refunded") return 50;
@@ -162,12 +167,24 @@ function ignored(spec: WebhookSpec, reason: string, variantId: string | null = s
   return { result: "ignored", action: "ignore", variantId, reason };
 }
 
+function paymentClearsRefund(existing: EntitlementRecord, spec: WebhookSpec): boolean {
+  return Boolean(existing.refunded) && spec.action === "grant" && spec.reason === "payment_success";
+}
+
+function grantFillsClearedRefund(existing: EntitlementRecord, spec: WebhookSpec, incomingMs: number): boolean {
+  if (spec.action !== "grant" || spec.reason === "payment_success") return false;
+  if (!spec.renewsAt && !spec.endsAt) return false;
+  return existing.refundClearedAtMs != null && existing.refundClearedAtMs === incomingMs;
+}
+
 function incomingIsStale(existing: EntitlementRecord, spec: WebhookSpec, precedence: number): boolean {
   const storedMs = existing.updatedAtMs ?? 0;
   const incomingMs = spec.updatedAtMs ?? storedMs;
   if (incomingMs !== storedMs) return incomingMs < storedMs;
   const storedPrec = existing.precedence ?? 0;
   if (precedence !== storedPrec) return precedence < storedPrec;
+  if (paymentClearsRefund(existing, spec)) return false;
+  if (grantFillsClearedRefund(existing, spec, incomingMs)) return false;
   const incomingId = spec.eventId ?? "";
   const storedId = existing.eventId ?? "";
   return incomingId <= storedId;
@@ -258,16 +275,37 @@ export function applyWebhookState(state: WebhookState, spec: WebhookSpec): Persi
     active = accessIsFuture(endsAt, renewsAt, spec.nowMs);
   }
 
-  // A refund's endsAt is "now", which would hide a later renews_at. Keep the
-  // new period, but leave Pro off until payment_success clears the refund.
+  // A refund's endsAt is the refund time, which would hide a later renews_at.
+  // Keep the new period, but leave Pro off until payment_success clears the refund.
   if (holdRefund) {
     if (spec.renewsAt) endsAt = spec.endsAt;
     active = false;
   }
 
+  const updatedAtMs = spec.updatedAtMs ?? existing?.updatedAtMs ?? 0;
   let refunded = Boolean(existing?.refunded);
-  if (spec.refund) refunded = true;
-  if (spec.action === "grant" && spec.reason === "payment_success") refunded = false;
+  let refundEndsAt = existing?.refundEndsAt ?? null;
+  let refundClearedAtMs = existing?.refundClearedAtMs ?? null;
+  if (spec.refund) {
+    refunded = true;
+    refundEndsAt = endsAt;
+    refundClearedAtMs = null;
+  }
+  if (spec.action === "grant" && spec.reason === "payment_success") {
+    const wasRefunded = refunded;
+    refunded = false;
+    if (wasRefunded && !spec.endsAt) {
+      if (refundEndsAt) {
+        if (endsAt === refundEndsAt) endsAt = null;
+      } else if (!renewsAt) {
+        endsAt = null;
+      }
+    }
+    if (wasRefunded) {
+      active = accessIsFuture(endsAt, renewsAt, spec.nowMs);
+      refundClearedAtMs = updatedAtMs;
+    }
+  }
 
   const record: EntitlementRecord = {
     subscriptionId,
@@ -280,8 +318,10 @@ export function applyWebhookState(state: WebhookState, spec: WebhookSpec): Persi
     endsAt,
     renewsAt,
     updatedAt: spec.eventTime ?? existing?.updatedAt ?? "",
-    updatedAtMs: spec.updatedAtMs ?? existing?.updatedAtMs ?? 0,
+    updatedAtMs,
     refunded,
+    refundEndsAt,
+    refundClearedAtMs,
     precedence,
     eventId: spec.eventId,
   };

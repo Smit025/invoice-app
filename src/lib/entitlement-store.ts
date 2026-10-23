@@ -25,6 +25,16 @@ export type EntitlementRecord = {
   precedence?: number;
   /** `meta.webhook_id` of the event that wrote this record. */
   eventId?: string | null;
+  /**
+   * `endsAt` written by the refund. That value is the refund time. A later
+   * `payment_success` drops `endsAt` when it still equals this stamp.
+   */
+  refundEndsAt?: string | null;
+  /**
+   * Lemon time of the `payment_success` that cleared `refunded`. A grant at
+   * that same millisecond may still fill `renews_at` or `ends_at`.
+   */
+  refundClearedAtMs?: number | null;
 };
 
 export interface EntitlementStore {

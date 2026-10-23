@@ -237,7 +237,101 @@ describe("atomic entitlement updates", () => {
       active: true,
       refunded: false,
       renewsAt: "2026-12-01T00:00:00.000Z",
+      endsAt: null,
     });
+  });
+
+  it("regrants Pro for payment-then-update and both same-second orderings", async () => {
+    const renewAt = "2026-11-01T00:00:00.000Z";
+    const later = "2026-11-01T00:00:01.000Z";
+    const cases = [
+      {
+        paymentAt: renewAt,
+        updateAt: later,
+        paymentId: "evt-2",
+        updateId: "evt-1",
+        paymentFirst: true,
+      },
+      {
+        paymentAt: renewAt,
+        updateAt: renewAt,
+        paymentId: "evt-1",
+        updateId: "evt-2",
+        paymentFirst: false,
+      },
+      {
+        paymentAt: renewAt,
+        updateAt: renewAt,
+        paymentId: "evt-2",
+        updateId: "evt-1",
+        paymentFirst: true,
+      },
+    ];
+    for (const item of cases) {
+      const store = new MemoryEntitlementStore();
+      await persistLemonWebhook(
+        subscription({
+          event: "subscription_created",
+          webhookId: "evt-created",
+          updatedAt: "2026-10-01T00:00:00.000Z",
+          renewsAt: "2026-11-01T00:00:00.000Z",
+        }),
+        store,
+        { storeId: STORE, now: NOW },
+      );
+      await persistLemonWebhook(
+        subscription({
+          event: "subscription_payment_refunded",
+          webhookId: "evt-refund",
+          updatedAt: "2026-10-02T00:00:00.000Z",
+          status: "refunded",
+          renewsAt: null,
+          endsAt: "2026-10-02T00:00:00.000Z",
+        }),
+        store,
+        { storeId: STORE, now: NOW },
+      );
+      const update = () =>
+        persistLemonWebhook(
+          subscription({
+            event: "subscription_updated",
+            webhookId: item.updateId,
+            updatedAt: item.updateAt,
+            status: "active",
+            renewsAt: "2026-12-01T00:00:00.000Z",
+            endsAt: null,
+          }),
+          store,
+          { storeId: STORE, now: NOW },
+        );
+      const payment = () =>
+        persistLemonWebhook(
+          subscription({
+            event: "subscription_payment_success",
+            type: "subscription-invoices",
+            id: "inv_renew",
+            subscriptionId: "sub_race",
+            webhookId: item.paymentId,
+            updatedAt: item.paymentAt,
+            status: "paid",
+            variantId: null,
+            renewsAt: null,
+            endsAt: null,
+          }),
+          store,
+          { storeId: STORE, now: NOW },
+        );
+      const first = item.paymentFirst ? await payment() : await update();
+      const second = item.paymentFirst ? await update() : await payment();
+      expect(first).toMatchObject({ result: "applied" });
+      expect(second).toMatchObject({ result: "applied" });
+      expect(await store.getBySubscriptionId("sub_race")).toMatchObject({
+        active: true,
+        refunded: false,
+        renewsAt: "2026-12-01T00:00:00.000Z",
+        endsAt: null,
+      });
+    }
   });
 
   it("resolves payment_success with no variant_id from the stored subscription", async () => {

@@ -33,6 +33,9 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Attach-device script
+        run: npx tsx scripts/attach-device.ts --help
+
       - name: Lint
         run: npm run lint
 

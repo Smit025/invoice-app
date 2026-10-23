@@ -20,13 +20,13 @@ From a machine that has the Upstash env for that deployment:
 VERCEL_ENV=production \
 UPSTASH_REDIS_REST_URL=... \
 UPSTASH_REDIS_REST_TOKEN=... \
-node --experimental-strip-types scripts/attach-device.ts \
+npx tsx scripts/attach-device.ts \
   --subscription <subscription id> \
   --install <32 hex install id> \
   --order <lemon order id>
 ```
 
-`VERCEL_ENV` must be set (`production` or `preview`). The script refuses to run without it, so it cannot write `inv:local:` against the production database. It reads `inv:<VERCEL_ENV>:order:<order id>` and continues only when that key points at the subscription id you passed. It then appends the install id to `inv:<VERCEL_ENV>:sub:<subscription id>` (at most 3 devices), and writes that id's `user:` and `idx:` keys.
+`VERCEL_ENV` must be set (`production` or `preview`). The script refuses to run without it, so it cannot write `inv:local:` against the production database. The order-id check, the refund check, the device cap, and the writes run in one Redis `EVAL`. A refund that lands while the command runs is not overwritten. It reads `inv:<VERCEL_ENV>:order:<order id>` and continues only when that key points at the subscription id you passed. It then appends the install id to `inv:<VERCEL_ENV>:sub:<subscription id>` (at most 3 devices), and writes that id's `idx:` key. The `user:` pointer is the best subscription for that install, the same choice the webhook makes.
 
 Run it once per device. If the install id is already on the subscription, the script leaves the list as it is and rewrites the pointer.
 
