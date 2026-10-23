@@ -70,6 +70,13 @@ describe("getPublicCheckoutUrl", () => {
     });
   });
 
+  it("uses an allowlisted env override instead of ignoring it", () => {
+    const override =
+      "https://billing.lemonsqueezy.com/checkout/buy/f1ffee5b-5cbe-4c44-ba12-1ec93b520ca2?enabled=2238798";
+    expect(isAllowlistedBuyUrl(override, "sixMonth")).toBe(true);
+    expect(getLemonPublicConfig({ NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: override }).sixMonthUrl).toBe(override);
+  });
+
   it("accepts the live URLs when set on the public env names", () => {
     const env = {
       NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: ` ${LIVE_SIX} `,

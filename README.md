@@ -32,7 +32,8 @@ Without Redis credentials, `npm run dev` keeps entitlement state in memory for t
 | `/app?template=classic` | Starts (or switches) that template |
 | `/pricing` | Free vs the two Pro plans, plus Lemon checkout |
 | `/thanks` | Post-checkout page. It does not unlock Pro. |
-| `/api/entitlement` | `GET ?user_id=` returns `active`, `inactive`, or `not_found` |
+| `/api/entitlement` | `GET` with header `X-Install-Id`. Returns `active`, `inactive`, or `not_found`. |
+| `/api/entitlement/restore` | `POST` email + order id, install id in `X-Install-Id`. Rebinds a verified purchase. |
 | `/api/webhooks/lemonsqueezy` | Signed Lemon webhook. Writes the entitlement store. |
 
 **Free:** full editor, three templates, PDF, watermark, one `localStorage` draft, no logo.  
@@ -47,9 +48,15 @@ Pro is a subscription. The paywall opens a **checkout overlay** via [Lemon.js](h
 - **$2.99/mo** — variant `2238873` — `https://myinvoicemaker.lemonsqueezy.com/checkout/buy/bd2f2883-79ba-47ec-8610-3287ee80846b?enabled=2238873`
 - **$7.99 every 6 months** — variant `2238798` — `https://myinvoicemaker.lemonsqueezy.com/checkout/buy/f1ffee5b-5cbe-4c44-ba12-1ec93b520ca2?enabled=2238798`
 
-The browser generates an anonymous install id (`invoice-install-v1`) and appends it as `checkout[custom][user_id]`. Lemon sends that id back on `meta.custom_data.user_id`. The webhook stores the subscription against that id. The app polls `GET /api/entitlement?user_id=`. A different id gets `not_found`.
+The browser generates an anonymous install id (`invoice-install-v1`): 16 bytes from `crypto.getRandomValues`, hex encoded (32 characters). It is sent to Lemon as `checkout[custom][user_id]` and back on `meta.custom_data.user_id`. The app sends it to `GET /api/entitlement` in the `X-Install-Id` header (or a POST body), never in the query string. A different id, or an older UUID, gets `not_found` and does not touch Redis. A stored UUID is replaced once in the browser; use Restore purchase to attach a subscription that was paid under the old id.
 
-Access ends at the stored `ends_at`, or at `renews_at` when `ends_at` is empty. The browser does not start its own expiry timer, and a checkout success event does not grant Pro.
+Access ends at the stored `ends_at`, or at `renews_at` when `ends_at` is empty. The browser does not start its own expiry timer, and a checkout success event does not grant Pro. If several records exist for one install, the active subscription wins over a later inactive record or a license key.
+
+The entitlement request is cached in `localStorage` for 15 minutes and the response sends `Cache-Control: private, max-age=900`. Fast polling (every 5 seconds, for at most 3 minutes, and it stops once Pro is active) runs only on `/thanks` and right after checkout. Every other page skips the API until checkout has started or a cached entitlement exists, then refreshes when that cache is older than 15 minutes (including when the tab is focused). An install that never started checkout and has no cached entitlement makes no entitlement requests.
+
+Each read is two Redis commands (the install pointer, then the subscription). A person who never checks out costs 0 commands. A subscriber with the app open about 4 hours on 20 days a month, refreshing every 15 minutes, is about 20 × 4 × 4 × 2 = 640 commands. One checkout confirmation adds about 36 reads × 2 = 72 commands. Webhook writes are one `EVAL` each. That is a few hundred commands per active user per month, inside Upstash's free 500,000 commands. Do not add a card to the Upstash account; a card switches it to pay-as-you-go.
+
+`/api/entitlement` rate limits in process memory (48 requests per 3 minutes per install id, 120 per minute per IP). The limiter does not use Redis. A store error returns 500 and does not grant Pro. The browser keeps a cached active snapshot for 15 minutes after that, and only if the server had already confirmed it.
 
 Both plans renew automatically until cancelled. Cancel from the link in the receipt email. Pro stays active until the end of the paid period.
 
@@ -69,6 +76,7 @@ Public URLs use `NEXT_PUBLIC_` names. Secrets stay server-only.
 | `LEMONSQUEEZY_WEBHOOK_SECRET` | Signing secret for `POST /api/webhooks/lemonsqueezy`. |
 | `UPSTASH_REDIS_REST_URL` | Free Upstash Redis REST URL. Required in production. |
 | `UPSTASH_REDIS_REST_TOKEN` | Free Upstash Redis REST token. Required in production. |
+| `LEMONSQUEEZY_API_KEY` | Optional. Server-only Lemon API key used by Restore purchase. Without it, restore matches the email hash and order id already stored from a signed webhook. |
 
 `KV_REST_API_URL` and `KV_REST_API_TOKEN` are accepted as aliases of the Upstash pair. Do not point these at a paid database.
 
@@ -100,11 +108,19 @@ Point Lemon **Settings → Webhooks** (live mode) at `https://<your-domain>/api/
 
 The route reads the raw body with `request.text()`, then checks `X-Signature` (HMAC-SHA256 hex, length check, `timingSafeEqual`) before `JSON.parse`. A missing secret returns 503. A bad signature returns 400. A handled event returns `{ ok: true }`.
 
-The variant is taken from `attributes.variant_id` or `first_order_item.variant_id`. Custom checkout data cannot choose the variant. When a price and currency are present they must be USD 299 (monthly) or USD 799 (6-month); they are not used to guess the plan. `meta.test_mode: true` is ignored in production. `attributes.store_id` must equal `LEMONSQUEEZY_STORE_ID`.
+The variant is taken from `attributes.variant_id` or `first_order_item.variant_id`. Custom checkout data cannot choose the variant. When a price and currency are present they must be USD 299 (monthly) or USD 799 (6-month); they are not used to guess the plan. If those amount fields are absent, the price check passes. That is only a secondary check after the variant is known. `subscription_payment_success` may omit `variant_id` (subscription invoices do). The plan is taken from the stored subscription. `meta.test_mode: true` is applied only when `VERCEL_ENV` is `preview`. `NODE_ENV` does not allow it. `attributes.store_id` must equal `LEMONSQUEEZY_STORE_ID`.
 
-A cancelled subscription stays active until `ends_at`. `subscription_expired`, a passed `ends_at`, or an expired/disabled license key clears Pro. `subscription_payment_failed`, `past_due`, and `unpaid` do not move the paid-through date later. Pause turns Pro off without extending the period. Resume and unpause turn it back on when that date is still ahead. A refund clears Pro immediately. `order_created` does not grant access.
+A cancelled subscription stays active until `ends_at`. `subscription_expired`, a passed `ends_at`, or an expired/disabled license key clears Pro. `subscription_payment_failed`, `past_due`, and `unpaid` do not move the paid-through date later. Pause turns Pro off without extending the period. Resume and unpause turn it back on when that date is still ahead. A refund clears Pro immediately and stays cleared if a later `subscription_updated` says active. A newer `subscription_payment_success` can restore it, because that event is a new charge. `order_created` does not grant access.
 
-Duplicate `meta.webhook_id` values are skipped. An event whose `updated_at` is older than the stored subscription is skipped.
+The duplicate check, the subscription read, the stale `updated_at` check, and both key writes run in one Redis `EVAL`. If that HTTP call fails, the event key is deleted so Lemon's retry can run. Duplicate `meta.webhook_id` values are skipped. An event whose `updated_at` is older than the stored subscription is skipped.
+
+### Restore purchase
+
+`/thanks` has a receipt form (`POST /api/entitlement/restore`). The body carries the email and order id. The install id is the `X-Install-Id` header.
+
+When `LEMONSQUEEZY_API_KEY` is set, the server loads the order from Lemon's API (by id, or by order number when the id misses). It rebinds only when all of these are true: the order email matches the form, `store_id` matches `LEMONSQUEEZY_STORE_ID`, status is `paid`, the order is not refunded, the variant is `2238873` or `2238798`, and `test_mode` is off unless `VERCEL_ENV` is `preview`. The subscription is then stored against the current install id. The previous browser loses Pro on its next refresh. A refund already stored for that subscription is not overwritten.
+
+Without the API key, the same email and order id must match an order the signed webhook already saved (the email is stored only as a SHA-256 hash). A mismatch, a refund, or an unknown order does not grant Pro. A failed lookup does not grant Pro either.
 
 ### Demo vs production fallback
 
@@ -116,7 +132,7 @@ Duplicate `meta.webhook_id` values are skipped. An event whose `updated_at` is o
 
 1. Import this GitHub repo in [Vercel](https://vercel.com/new).
 2. Framework preset: **Next.js**. Build command `npm run build`, output is the default Next.js output.
-3. Set `LEMONSQUEEZY_STORE_ID`, `LEMONSQUEEZY_WEBHOOK_SECRET`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN`. Use the free Upstash tier. The two live buy links are already the code defaults.
+3. Set `LEMONSQUEEZY_STORE_ID`, `LEMONSQUEEZY_WEBHOOK_SECRET`, `UPSTASH_REDIS_REST_URL`, and `UPSTASH_REDIS_REST_TOKEN`. Use the free Upstash tier. The two live buy links are already the code defaults. `LEMONSQUEEZY_API_KEY` is optional and only used to restore a purchase from Lemon's API.
 4. After deploy, register the live webhook URL for the subscription events above.
 5. The editor itself stays client-side. Entitlement and webhook routes are the serverless endpoints.
 

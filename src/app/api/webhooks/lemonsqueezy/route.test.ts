@@ -2,14 +2,15 @@ import crypto from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET as getEntitlement } from "@/app/api/entitlement/route";
+import { resetRateLimitsForTests } from "@/lib/rate-limit";
 import { MemoryEntitlementStore, setEntitlementStoreForTests } from "@/lib/entitlement-store";
 import { LEMON_VARIANT_IDS } from "@/lib/lemon-config";
 import { POST } from "./route";
 
 const SECRET = "whsec_test";
 const STORE_ID = "123";
-const USER_A = "11111111-1111-4111-8111-111111111111";
-const USER_B = "22222222-2222-4222-8222-222222222222";
+const USER_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const USER_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 function sign(body: string, secret: string): string {
   return crypto.createHmac("sha256", secret).update(body).digest("hex");
@@ -20,6 +21,12 @@ function signed(body: string, secret = SECRET) {
     method: "POST",
     body,
     headers: { "X-Signature": sign(body, secret) },
+  });
+}
+
+function entitlementRequest(userId: string) {
+  return new NextRequest("http://localhost/api/entitlement", {
+    headers: { "x-install-id": userId },
   });
 }
 
@@ -80,8 +87,10 @@ describe("POST /api/webhooks/lemonsqueezy", () => {
     vi.stubEnv("LEMONSQUEEZY_WEBHOOK_SECRET", SECRET);
     vi.stubEnv("LEMONSQUEEZY_STORE_ID", STORE_ID);
     vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("VERCEL_ENV", "");
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
     vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
+    resetRateLimitsForTests();
   });
 
   afterEach(() => {
@@ -154,13 +163,13 @@ describe("POST /api/webhooks/lemonsqueezy", () => {
       subscriptionId: "sub_1",
     });
 
-    const mine = await getEntitlement(new NextRequest(`http://localhost/api/entitlement?user_id=${USER_A}`));
+    const mine = await getEntitlement(entitlementRequest(USER_A));
     await expect(mine.json()).resolves.toMatchObject({ status: "active", plan: "monthly" });
 
-    const other = await getEntitlement(new NextRequest(`http://localhost/api/entitlement?user_id=${USER_B}`));
+    const other = await getEntitlement(entitlementRequest(USER_B));
     await expect(other.json()).resolves.toEqual({ status: "not_found" });
 
-    const invalid = await getEntitlement(new NextRequest("http://localhost/api/entitlement?user_id=not-a-uuid"));
+    const invalid = await getEntitlement(entitlementRequest("not-a-uuid"));
     await expect(invalid.json()).resolves.toEqual({ status: "not_found" });
   });
 
@@ -176,7 +185,7 @@ describe("POST /api/webhooks/lemonsqueezy", () => {
     );
     const record = await store.getByUserId(USER_A);
     expect(record).toMatchObject({ active: true, endsAt, renewsAt: null });
-    const response = await getEntitlement(new NextRequest(`http://localhost/api/entitlement?user_id=${USER_A}`));
+    const response = await getEntitlement(entitlementRequest(USER_A));
     await expect(response.json()).resolves.toMatchObject({ status: "active", endsAt });
 
     await post(
@@ -432,8 +441,9 @@ describe("POST /api/webhooks/lemonsqueezy", () => {
     expect(await store.getBySubscriptionId("sub_order")).toMatchObject({ active: false });
   });
 
-  it("rejects test_mode events in production and still accepts them outside production", async () => {
+  it("accepts test_mode only when VERCEL_ENV is preview", async () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "production");
     await post(
       payload({
         event: "subscription_created",
@@ -443,11 +453,22 @@ describe("POST /api/webhooks/lemonsqueezy", () => {
     );
     expect(await store.getByUserId(USER_A)).toBeNull();
 
-    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "");
     await post(
       payload({
         event: "subscription_created",
-        webhookId: "wh-test-mode-dev",
+        webhookId: "wh-test-mode-node",
+        meta: { test_mode: true },
+      }),
+    );
+    expect(await store.getByUserId(USER_A)).toBeNull();
+
+    vi.stubEnv("VERCEL_ENV", "preview");
+    await post(
+      payload({
+        event: "subscription_created",
+        webhookId: "wh-test-mode-preview",
         meta: { test_mode: true },
       }),
     );

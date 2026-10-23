@@ -86,7 +86,8 @@ export function isAllowlistedBuyUrl(value: string | undefined, plan: CheckoutPla
 
 function allowlistedOrDefault(env: EnvMap, keys: readonly string[], plan: CheckoutPlan, fallback: string): string {
   for (const key of keys) {
-    if (isAllowlistedBuyUrl(env[key], plan)) return fallback;
+    const accepted = isDirectBuyUrl(env[key]);
+    if (accepted && isAllowlistedBuyUrl(accepted, plan)) return accepted;
   }
   return fallback;
 }

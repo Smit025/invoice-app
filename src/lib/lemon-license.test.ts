@@ -5,7 +5,7 @@ import { resolveLemonLicense } from "./lemon-license";
 const NOW = new Date("2026-10-23T00:00:00.000Z");
 const FUTURE = "2026-11-23T00:00:00.000Z";
 const PAST = "2026-10-01T00:00:00.000Z";
-const USER = "11111111-1111-4111-8111-111111111111";
+const USER = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const STORE = "123";
 
 function subscription(
@@ -34,11 +34,11 @@ function subscription(
   };
 }
 
-function decide(payload: unknown, extra?: { production?: boolean; storeId?: string }) {
+function decide(payload: unknown, extra?: { allowTestMode?: boolean; storeId?: string }) {
   return resolveLemonLicense(payload, {
     now: NOW,
     storeId: extra?.storeId ?? STORE,
-    production: extra?.production ?? false,
+    allowTestMode: extra?.allowTestMode ?? false,
   });
 }
 
@@ -89,7 +89,13 @@ describe("subscription license decisions", () => {
           },
         },
       }),
-    ).toMatchObject({ action: "ignore", reason: "unknown_variant" });
+    ).toMatchObject({
+      action: "grant",
+      reason: "payment_success",
+      plan: null,
+      variantId: null,
+      subjectId: "9",
+    });
   });
 
   it("rejects a mismatched currency or amount when the variant is known", () => {
@@ -173,17 +179,29 @@ describe("subscription license decisions", () => {
     ).toMatchObject({ action: "revoke", reason: "refunded", plan: "sixMonth" });
   });
 
-  it("rejects test mode in production and ignores a license variant that only lives in custom data", () => {
+  it("accepts test mode only when preview allows it, and ignores a license variant that only lives in custom data", () => {
     expect(
-      decide(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, {}, { test_mode: true }), {
-        production: true,
-      }).reason,
+      decide(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, {}, { test_mode: true })).reason,
     ).toBe("test_mode");
     expect(
       decide(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, {}, { test_mode: true }), {
-        production: false,
+        allowTestMode: true,
       }).action,
     ).toBe("grant");
+    expect(
+      resolveLemonLicense(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, {}, { test_mode: true }), {
+        now: NOW,
+        storeId: STORE,
+        env: { VERCEL_ENV: "preview" },
+      }).action,
+    ).toBe("grant");
+    expect(
+      resolveLemonLicense(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, {}, { test_mode: true }), {
+        now: NOW,
+        storeId: STORE,
+        env: { VERCEL_ENV: "production", NODE_ENV: "production" },
+      }).reason,
+    ).toBe("test_mode");
 
     expect(
       decide({

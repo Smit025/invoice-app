@@ -82,6 +82,57 @@ describe("entitlement store", () => {
     });
   });
 
+  it("claims, compares, and writes a webhook in one EVAL, and drops the claim if that call fails", async () => {
+    const calls: string[][] = [];
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      const args = JSON.parse(String(init?.body)) as string[];
+      calls.push(args);
+      if (args[0] === "EVAL" && calls.filter((call) => call[0] === "EVAL").length === 1) {
+        return { ok: false, status: 500, json: async () => ({ error: "down" }) };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          result: JSON.stringify({ result: "applied", action: "grant", variantId: "2238873", reason: "active" }),
+        }),
+      };
+    });
+    const store = new UpstashEntitlementStore("https://example.upstash.io", "token", fetchImpl as unknown as typeof fetch);
+    const spec = {
+      eventId: "wh_1",
+      action: "grant" as const,
+      dateMode: "fill" as const,
+      plan: "monthly" as const,
+      variantId: "2238873",
+      subjectId: "sub_1",
+      userId: record.userId,
+      endsAt: null,
+      renewsAt: record.renewsAt,
+      updatedAtMs: record.updatedAtMs,
+      nowMs: record.updatedAtMs,
+      nowIso: record.updatedAt,
+      status: "active",
+      reason: "active",
+      refund: false,
+      currency: "USD",
+      amounts: [299],
+      reuseStoredPlan: false,
+      orderId: null,
+      emailHash: null,
+      eventTime: record.updatedAt,
+    };
+    await expect(store.applyWebhook(spec)).rejects.toThrow(/failed/);
+    expect(calls[0]?.[0]).toBe("EVAL");
+    expect(calls[0]?.[1]).toContain("NX");
+    expect(calls[0]?.[1]).toContain("updatedAtMs");
+    expect(calls[0]?.[1]).toContain("inv:sub:");
+    expect(calls[0]?.[1]).toContain("inv:user:");
+    expect(calls[1]).toEqual(["DEL", "inv:event:wh_1"]);
+
+    await expect(store.applyWebhook({ ...spec, eventId: "wh_2" })).resolves.toMatchObject({ result: "applied" });
+    expect(calls.filter((call) => call[0] === "EVAL")).toHaveLength(2);
+  });
+
   it("refuses to run in production without Redis credentials", () => {
     expect(() => getEntitlementStore({ NODE_ENV: "production" })).toThrow(/not configured/);
     const store = getEntitlementStore({

@@ -35,7 +35,8 @@ export type ResolveLicenseOptions = {
   variants?: { sixMonth: string; monthly: string };
   env?: EnvMap;
   storeId?: string;
-  production?: boolean;
+  /** Apply `meta.test_mode` events. The webhook sets this only when VERCEL_ENV is preview. */
+  allowTestMode?: boolean;
 };
 
 function asId(value: unknown): string | undefined {
@@ -87,38 +88,55 @@ function readUserId(meta: Record<string, unknown>): string | null {
   const value = custom?.user_id;
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
-  return isInstallUserId(trimmed) ? trimmed : null;
+  return isInstallUserId(trimmed) ? trimmed.toLowerCase() : null;
 }
 
 function readEventTime(attributes: Record<string, unknown>): string | null {
   return readIso(attributes.updated_at) ?? readIso(attributes.created_at);
 }
 
-/**
- * Price and currency are a secondary check once the variant is known.
- * Missing money fields do not identify a plan. A present currency must be USD,
- * and at least one present amount must match that variant (299 or 799 cents).
- */
-export function payloadPriceMatches(payload: unknown, plan: CheckoutPlan): boolean {
-  const { attributes } = payloadParts(payload);
-  const currency = typeof attributes.currency === "string" ? attributes.currency.trim().toUpperCase() : undefined;
-  if (currency && currency !== "USD") return false;
+export type PriceEvidence = {
+  currency: string | null;
+  amounts: number[];
+};
 
-  const expected = LEMON_PRICE_CENTS[plan];
-  const present: number[] = [];
+export function readPriceEvidence(payload: unknown): PriceEvidence {
+  const { attributes } = payloadParts(payload);
+  const currency = typeof attributes.currency === "string" ? attributes.currency.trim().toUpperCase() : null;
+  const amounts: number[] = [];
   for (const key of ["subtotal", "subtotal_usd", "total", "total_usd"] as const) {
     const cents = asCents(attributes[key]);
-    if (cents !== undefined) present.push(cents);
+    if (cents !== undefined) amounts.push(cents);
   }
   const firstItem = readRecord(attributes.first_order_item);
   if (firstItem) {
     for (const key of ["price", "subtotal", "total"] as const) {
       const cents = asCents(firstItem[key]);
-      if (cents !== undefined) present.push(cents);
+      if (cents !== undefined) amounts.push(cents);
     }
   }
-  if (present.length === 0) return true;
-  return present.some((cents) => cents === expected);
+  return { currency, amounts };
+}
+
+export function readOrderBinding(payload: unknown): { orderId: string | null; email: string | null } {
+  const { data, attributes } = payloadParts(payload);
+  const email = typeof attributes.user_email === "string" ? attributes.user_email.trim() : "";
+  const orderId = asId(attributes.order_id) ?? (data.type === "orders" ? asId(data.id) : undefined);
+  return { orderId: orderId ?? null, email: email || null };
+}
+
+/**
+ * Price and currency are a secondary check once the variant is known.
+ * A present currency must be USD, and at least one present amount must match
+ * that variant (299 or 799 cents). When no amount fields are present this
+ * returns true. Missing money fields do not identify a plan.
+ */
+export function payloadPriceMatches(payload: unknown, plan: CheckoutPlan): boolean {
+  const { currency, amounts } = readPriceEvidence(payload);
+  if (currency && currency !== "USD") return false;
+  if (amounts.length === 0) return true;
+  const expected = LEMON_PRICE_CENTS[plan];
+  return amounts.some((cents) => cents === expected);
 }
 
 function readSubjectId(payload: unknown, event: string): string | null {
@@ -169,10 +187,10 @@ export function resolveLemonLicense(
 ): LemonLicenseDecision {
   const now = options?.now ?? new Date();
   const variants = options?.variants ?? getProVariantIds(options?.env);
-  const production = options?.production ?? options?.env?.NODE_ENV === "production";
+  const allowTestMode = options?.allowTestMode ?? options?.env?.VERCEL_ENV === "preview";
   const event = getLemonEventName(payload);
 
-  if (production && isLemonTestMode(payload)) {
+  if (isLemonTestMode(payload) && !allowTestMode) {
     return ignore(event, "test_mode");
   }
 
@@ -298,10 +316,12 @@ export function resolveLemonLicense(
   }
 
   if (event === "subscription_payment_success") {
-    if (!plan || !explicitVariant) return ignore(event, "unknown_variant", identified);
+    if (explicitVariant && !plan) return ignore(event, "unknown_variant", identified);
     if (status && status !== "paid") {
       return ignore(event, "payment_not_paid", identified);
     }
+    // A real subscription invoice often has subscription_id and no variant_id.
+    // The stored subscription supplies the plan when this one is missing.
     return {
       ...identified,
       action: "grant",

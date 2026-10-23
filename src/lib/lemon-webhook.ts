@@ -63,7 +63,7 @@ export function getLemonEventName(payload: unknown): string | undefined {
   return typeof eventName === "string" ? eventName : undefined;
 }
 
-/** Lemon sets `meta.test_mode` on events from test mode. Reject those in production. */
+/** Lemon sets `meta.test_mode` on events from test mode. Accept those only when VERCEL_ENV is preview. */
 export function isLemonTestMode(payload: unknown): boolean {
   return readMeta(payload)?.test_mode === true;
 }

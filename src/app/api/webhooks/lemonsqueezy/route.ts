@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   try {
     outcome = await persistLemonWebhook(payload, store, {
       storeId,
-      production: process.env.NODE_ENV === "production",
+      allowTestMode: process.env.VERCEL_ENV === "preview",
     });
   } catch (error) {
     if (error instanceof EntitlementStoreNotConfiguredError) {
