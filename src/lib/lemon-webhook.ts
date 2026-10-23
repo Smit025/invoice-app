@@ -1,8 +1,25 @@
 import crypto from "node:crypto";
 
-export const LEMON_ENTITLEMENT_EVENTS = ["order_created", "license_key_created"] as const;
+export const LEMON_SUBSCRIPTION_EVENTS = [
+  "subscription_created",
+  "subscription_updated",
+  "subscription_cancelled",
+  "subscription_expired",
+  "subscription_payment_success",
+] as const;
 
-export type LemonEntitlementEvent = (typeof LEMON_ENTITLEMENT_EVENTS)[number];
+export const LEMON_LICENSE_EVENTS = [
+  ...LEMON_SUBSCRIPTION_EVENTS,
+  "license_key_created",
+  "license_key_updated",
+] as const;
+
+export type LemonLicenseEvent = (typeof LEMON_LICENSE_EVENTS)[number];
+
+/** @deprecated Use LEMON_LICENSE_EVENTS. Orders are not a permanent Pro grant. */
+export const LEMON_ENTITLEMENT_EVENTS = LEMON_LICENSE_EVENTS;
+
+export type LemonEntitlementEvent = LemonLicenseEvent;
 
 export function verifyLemonSignature(
   rawBody: string,
@@ -36,10 +53,8 @@ export function getLemonEventName(payload: unknown): string | undefined {
   return typeof eventName === "string" ? eventName : undefined;
 }
 
-export function isLemonEntitlementEvent(eventName: string | undefined): eventName is LemonEntitlementEvent {
-  return (
-    eventName === "order_created" || eventName === "license_key_created"
-  );
+export function isLemonEntitlementEvent(eventName: string | undefined): eventName is LemonLicenseEvent {
+  return !!eventName && (LEMON_LICENSE_EVENTS as readonly string[]).includes(eventName);
 }
 
 export function summarizeLemonWebhook(payload: unknown): {

@@ -76,11 +76,19 @@ export function InvoiceProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const onUnlock = () => {
-      setIsPro(true);
-      setPaywallOpen(false);
+      const pro = readIsPro();
+      setIsPro(pro);
+      if (pro) setPaywallOpen(false);
     };
+    const syncPro = () => setIsPro(readIsPro());
     window.addEventListener(PRO_UNLOCKED_EVENT, onUnlock);
-    return () => window.removeEventListener(PRO_UNLOCKED_EVENT, onUnlock);
+    window.addEventListener("focus", syncPro);
+    document.addEventListener("visibilitychange", syncPro);
+    return () => {
+      window.removeEventListener(PRO_UNLOCKED_EVENT, onUnlock);
+      window.removeEventListener("focus", syncPro);
+      document.removeEventListener("visibilitychange", syncPro);
+    };
   }, []);
 
   const persist = useCallback(

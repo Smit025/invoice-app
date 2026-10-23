@@ -2,12 +2,12 @@ import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/Button";
 import { CheckoutButtons } from "@/components/checkout/CheckoutButtons";
-import { PRICING } from "@/lib/constants";
+import { PRICE_LABEL } from "@/lib/constants";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: `Free invoice maker with watermark, or Pro for $${PRICING.oneTime} one-time / $${PRICING.monthly} per month.`,
+  description: `Free invoice maker with watermark, or Pro for ${PRICE_LABEL.monthly} or ${PRICE_LABEL.sixMonth}.`,
 };
 
 export default function PricingPage() {
@@ -27,11 +27,9 @@ export default function PricingPage() {
             </p>
           </div>
           <div className="rounded-xl border border-accent p-5">
-            <p className="font-semibold text-accent">
-              Pro — ${PRICING.oneTime} one-time
-            </p>
+            <p className="font-semibold text-accent">Pro — {PRICE_LABEL.monthly}</p>
             <p className="mt-1 text-sm text-muted">
-              {`No watermark, logo upload, unlimited drafts on this device. Optional $${PRICING.monthly}/mo.`}
+              {`No watermark, logo upload, unlimited drafts on this device. ${PRICE_LABEL.sixMonth}.`}
             </p>
             <div className="mt-4">
               <CheckoutButtons />

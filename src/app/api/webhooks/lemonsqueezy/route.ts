@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import {
-  getLemonEventName,
-  isLemonEntitlementEvent,
-  summarizeLemonWebhook,
-  verifyLemonSignature,
-} from "@/lib/lemon-webhook";
+import { resolveLemonLicense } from "@/lib/lemon-license";
+import { getLemonEventName, summarizeLemonWebhook, verifyLemonSignature } from "@/lib/lemon-webhook";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,15 +34,29 @@ export async function POST(request: NextRequest) {
 
   const eventName = getLemonEventName(payload);
   const summary = summarizeLemonWebhook(payload);
+  const decision = resolveLemonLicense(payload);
 
-  if (isLemonEntitlementEvent(eventName)) {
-    console.info("[lemonsqueezy webhook]", eventName, {
-      id: summary.id,
-      type: summary.type,
-    });
-  } else {
-    console.info("[lemonsqueezy webhook]", eventName ?? "unknown");
-  }
+  console.info("[lemonsqueezy webhook]", eventName ?? "unknown", {
+    id: summary.id,
+    type: summary.type,
+    action: decision.action,
+    active: decision.active,
+    variantId: decision.variantId,
+  });
 
-  return NextResponse.json({ ok: true }, { status: 200 });
+  return NextResponse.json(
+    {
+      ok: true,
+      license: {
+        event: decision.event ?? null,
+        action: decision.action,
+        active: decision.active,
+        plan: decision.plan,
+        variantId: decision.variantId,
+        endsAt: decision.endsAt,
+        reason: decision.reason,
+      },
+    },
+    { status: 200 },
+  );
 }

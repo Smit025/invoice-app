@@ -1,19 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
-import {
-  createLemonCheckout,
-  getLemonServerConfig,
-  isApiCheckoutConfigured,
-  parseCheckoutPlan,
-} from "@/lib/lemon-server";
+import { getPublicCheckoutUrl } from "@/lib/lemon-config";
+import { parseCheckoutPlan } from "@/lib/lemon-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Returns the live `/checkout/buy/` links. This route does not call
+ * Lemon's checkouts API, which was creating test-mode `/checkout/cart/` overlays.
+ */
 function checkoutCapabilities() {
-  const config = getLemonServerConfig();
   return {
-    oneTime: isApiCheckoutConfigured("onetime", config),
-    monthly: isApiCheckoutConfigured("monthly", config),
+    sixMonth: Boolean(getPublicCheckoutUrl("sixMonth")),
+    monthly: Boolean(getPublicCheckoutUrl("monthly")),
   };
 }
 
@@ -34,16 +33,10 @@ export async function POST(request: NextRequest) {
   );
   if (!plan) {
     return NextResponse.json(
-      { error: "plan must be \"onetime\" or \"monthly\"" },
+      { error: "plan must be \"monthly\" or \"sixMonth\"" },
       { status: 400 },
     );
   }
 
-  const origin = request.nextUrl.origin;
-  const result = await createLemonCheckout({ plan, origin });
-  if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: result.status });
-  }
-
-  return NextResponse.json({ url: result.url });
+  return NextResponse.json({ url: getPublicCheckoutUrl(plan) });
 }

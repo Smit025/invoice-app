@@ -1,6 +1,6 @@
 # InvoiceMaker
 
-Client-only invoice generator for the US and Europe (VAT, sales tax, optional India GST). Next.js App Router, Tailwind CSS, TypeScript. No auth or database. Pro is a device-local flag (`invoice-pro-v1`) unlocked after Lemon Squeezy checkout.
+Client-only invoice generator for the US and Europe (VAT, sales tax, optional India GST). Next.js App Router, Tailwind CSS, TypeScript. No auth or database. Pro is a device-local flag (`invoice-pro-v1`) unlocked after Lemon Squeezy checkout and cleared when that subscription period ends.
 
 ## Run locally
 
@@ -30,8 +30,8 @@ Copy `.env.example` to `.env.local` and paste Lemon Squeezy values when you have
 | `/app?template=classic` | Starts (or switches) that template |
 | `/pricing` | Free vs Pro + Lemon checkout CTAs |
 | `/thanks` | Post-checkout landing (`?pro=1` unlocks Pro on this device) |
-| `/api/checkout` | `GET` capabilities · `POST` creates a Lemon checkout when API keys are set |
-| `/api/webhooks/lemonsqueezy` | Signed Lemon webhook (logs entitlement events; no server unlock yet) |
+| `/api/checkout` | `GET` capabilities · `POST` returns the live `/checkout/buy/` link. Does not create a Lemon cart. |
+| `/api/webhooks/lemonsqueezy` | Signed Lemon webhook. Subscription events grant or end Pro. |
 
 **Free:** full editor, three templates, PDF, watermark, one `localStorage` draft, no logo.  
 **Pro:** no watermark, logo upload, unlimited local drafts.
@@ -40,39 +40,49 @@ Drafts are stored at `invoice-draft-v1`. Theme (light/dark) applies to chrome on
 
 ## Lemon Squeezy (Pro checkout)
 
-The paywall prefers a **checkout overlay** via [Lemon.js](https://docs.lemonsqueezy.com/help/lemonjs/opening-overlays). On `Checkout.Success` the app sets `localStorage.invoice-pro-v1 = "1"` and shows a toast. That is the MVP entitlement path (no accounts).
+Pro is a subscription. The paywall opens a **checkout overlay** via [Lemon.js](https://docs.lemonsqueezy.com/help/lemonjs/opening-overlays) on the live `/checkout/buy/` links:
+
+- **$2.99/mo** — variant `2238873`
+- **$7.99 every 6 months** — variant `2238798`
+
+On `Checkout.Success` the app stores a device license in `localStorage.invoice-pro-v1` that expires at the end of that billing period (or sooner if Lemon includes `ends_at` / `renews_at`). There is no account.
+
+The paywall does **not** call Lemon's checkouts API. That path was opening a test-mode `/checkout/cart/` overlay. `POST /api/checkout` only echoes the live buy link. `createLemonCheckout` still exists for a live key, and it refuses to create a cart unless the variant's `test_mode` is `false`.
 
 ### Environment variables
 
-Public (safe to expose; used by the browser):
-
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` | One-time **$7.99** overlay / share URL. Defaults in code to the live Pro buy link so production works before Vercel env is set. Override here if needed. |
-| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY` | Optional monthly overlay URL. Shows a secondary CTA only when set. Primary offer remains $7.99 one-time. |
-| `NEXT_PUBLIC_CHECKOUT_URL` | Deprecated alias for the one-time URL. |
-
-Server-only (never prefix with `NEXT_PUBLIC_`):
-
-| Variable | Purpose |
-| --- | --- |
-| `LEMONSQUEEZY_API_KEY` | API key for `POST /api/checkout`. |
+| `LEMONSQUEEZY_CHECKOUT_URL` | 6-month buy link. Falls back to the live URL above. |
+| `LEMONSQUEEZY_CHECKOUT_URL_MONTHLY` | Monthly buy link. Falls back to the live URL above. |
+| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` | Optional alias of the 6-month URL. |
+| `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY` | Optional alias of the monthly URL. |
+| `NEXT_PUBLIC_CHECKOUT_URL` | Deprecated alias of the 6-month URL. |
+| `LEMONSQUEEZY_API_KEY` | Live API key. Not used by the paywall. Test-mode keys cannot create carts. |
 | `LEMONSQUEEZY_STORE_ID` | Store id from Lemon **Settings → Stores**. |
-| `LEMONSQUEEZY_VARIANT_ID` | One-time Pro variant id. |
-| `LEMONSQUEEZY_VARIANT_ID_MONTHLY` | Optional monthly variant id. |
+| `LEMONSQUEEZY_VARIANT_ID` | 6-month variant. Defaults to `2238798`. |
+| `LEMONSQUEEZY_VARIANT_ID_MONTHLY` | Monthly variant. Defaults to `2238873`. |
 | `LEMONSQUEEZY_WEBHOOK_SECRET` | Signing secret for `POST /api/webhooks/lemonsqueezy`. |
 
-If the public checkout URL is set (or the built-in $7.99 default is used), the client opens it with Lemon.js and **does not** need the API key. Variant-based checkout is a fallback: when API key + store + variant ids are present, `POST /api/checkout` `{ "plan": "onetime" \| "monthly" }` creates a checkout and returns `{ "url" }` for the overlay.
+Retired test buy link `c3c13987-5ccc-4a5c-b260-fd7eae12baca` and any `/checkout/cart/` or `/checkout/custom/` URL are ignored.
 
-### Webhook (future server entitlement)
+### Webhook
 
-Point Lemon **Settings → Webhooks** at `https://<your-domain>/api/webhooks/lemonsqueezy`. The route verifies `X-Signature` (HMAC-SHA256 of the raw body). On `order_created` and `license_key_created` it logs a short summary and returns **200**. It does **not** unlock Pro on the server — there is no user store yet. Client unlock stays on Lemon.js `Checkout.Success` (and `/thanks?pro=1` after a hosted redirect).
+Point Lemon **Settings → Webhooks** (live mode) at `https://<your-domain>/api/webhooks/lemonsqueezy` and subscribe to:
+
+- `subscription_created`
+- `subscription_updated`
+- `subscription_cancelled`
+- `subscription_expired`
+- `subscription_payment_success`
+
+The route verifies `X-Signature` (HMAC-SHA256 of the raw body). Both variants (`2238873`, `2238798`) grant Pro. A cancelled subscription stays active until `ends_at`. `subscription_expired`, an `ends_at` in the past, or an expired/disabled license key sets Pro inactive. `order_created` is acknowledged and does not grant access. There is no user database, so the device enforces the period stored at checkout. The webhook response reports the license decision for that event.
 
 ### Demo vs production fallback
 
-- **Lemon configured** (public URL or API checkout): primary **Unlock Pro — $7.99**, optional monthly button if that URL/variant is set, **Continue free**. No demo button.
-- **Not configured + `NODE_ENV=development`** (`next dev`): **Unlock Pro — $7.99 (demo)** with a demo-mode label. Sets `invoice-pro-v1` locally.
-- **Not configured + production** (`next build` / Vercel): **Payments coming soon**.
+- **Live buy links** (the code defaults): **Unlock Pro — $2.99/mo** beside **Unlock Pro — $7.99 every 6 months**, plus **Continue free**.
+- **Not configured + `NODE_ENV=development`**: **Unlock Pro (demo)**. Sets `invoice-pro-v1` locally.
+- **Not configured + production**: **Payments coming soon**.
 
 You can still force Pro in the browser console:
 
@@ -84,8 +94,8 @@ localStorage.setItem("invoice-pro-v1", "1");
 
 1. Import this GitHub repo in [Vercel](https://vercel.com/new).
 2. Framework preset: **Next.js**. Build command `npm run build`, output is the default Next.js output.
-3. Overlay checkout works without env vars (the $7.99 buy URL is the code default). Optionally set `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` to override, plus server keys for the webhook / API checkout.
-4. After deploy, register the webhook URL in Lemon Squeezy if you want signed `order_created` logs.
+3. Set `LEMONSQUEEZY_CHECKOUT_URL` and `LEMONSQUEEZY_CHECKOUT_URL_MONTHLY` to the live buy links (also the code defaults). Remove the retired test buy link if it is still set. Use a **live** API key if you set `LEMONSQUEEZY_API_KEY`.
+4. After deploy, register the live webhook URL for the subscription events above.
 5. The editor itself stays client-side; checkout and webhook routes are the only serverless endpoints.
 
 ## Stack notes
