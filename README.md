@@ -64,7 +64,7 @@ Vercel Firewall rate limiting is included on the Hobby plan: one rule per projec
 - If the path starts with `/api/entitlement`
 - Fixed window, 30 requests per 60 seconds, key IP, action 429
 
-That rule is free on Hobby. Leave it off only if you do not want the cap. Do not enable rate-limit overage. There is no `vercel.json` firewall entry in this repo; the dashboard is what publishes the included rule. The in-memory limiter stays as a second layer.
+Vercel counts that limit per region, so the 30 requests per 60 seconds cap applies separately in each region. The rule is free on Hobby. Leave it off only if you do not want the cap. Do not enable rate-limit overage. There is no `vercel.json` firewall entry in this repo; the dashboard is what publishes the included rule. The in-memory limiter stays as a second layer.
 
 Both plans renew automatically until cancelled. Cancel from the link in the receipt email. Pro stays active until the end of the paid period.
 
@@ -78,6 +78,7 @@ Public URLs use `NEXT_PUBLIC_` names. Secrets stay server-only.
 | --- | --- |
 | `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL` | Optional. Accepted only when it is the live 6-month buy link above. |
 | `NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY` | Optional. Accepted only when it is the live monthly buy link above. |
+| `NEXT_PUBLIC_SUPPORT_EMAIL` | Optional. Shown on `/thanks`, the paywall, and `/pricing` so a buyer can email that address with their Lemon Squeezy receipt if Pro disappears. The line is hidden when this is unset. |
 | `LEMONSQUEEZY_STORE_ID` | Store id from Lemon **Settings → Stores**. Required in production. The webhook rejects events whose `store_id` does not match. |
 | `LEMONSQUEEZY_VARIANT_ID` | 6-month variant. Defaults to `2238798`. |
 | `LEMONSQUEEZY_VARIANT_ID_MONTHLY` | Monthly variant. Defaults to `2238873`. |
@@ -117,7 +118,7 @@ The route reads the raw body with `request.text()`, then checks `X-Signature` (H
 
 The variant is taken from `attributes.variant_id` or `first_order_item.variant_id`. Custom checkout data cannot choose the variant. When a price and currency are present they must be USD 299 (monthly) or USD 799 (6-month); they are not used to guess the plan. If those amount fields are absent, the price check passes. That is only a secondary check after the variant is known. `subscription_payment_success` may omit `variant_id` (subscription invoices do). The plan is taken from the stored subscription. `meta.test_mode: true` is applied only when `VERCEL_ENV` is `preview`. `NODE_ENV` does not allow it. `attributes.store_id` must equal `LEMONSQUEEZY_STORE_ID`.
 
-A cancelled subscription stays active until `ends_at`. `subscription_expired`, a passed `ends_at`, or an expired/disabled license key clears Pro. `subscription_payment_failed`, `past_due`, and `unpaid` do not move the paid-through date later. Pause turns Pro off without extending the period. Resume and unpause turn it back on when that date is still ahead. A refund clears Pro immediately and stays cleared if a later `subscription_updated` on that same subscription says active. A newer `subscription_payment_success` can clear the refund, because that event is a new charge. A refund of one subscription does not block a later purchase that has a different subscription id. `order_created` does not grant access.
+A cancelled subscription stays active until `ends_at`. `subscription_expired`, a passed `ends_at`, or an expired/disabled license key clears Pro. `subscription_payment_failed`, `past_due`, and `unpaid` do not move the paid-through date later. Pause turns Pro off without extending the period. Resume and unpause turn it back on when that date is still ahead. A refund clears Pro immediately. A later `subscription_updated` on that same subscription stores the new period and leaves Pro off. A following `subscription_payment_success` clears the refund and turns Pro back on from those dates, including when the update arrives before the invoice and the invoice has no dates of its own. A refund of one subscription does not block a later purchase that has a different subscription id. `order_created` does not grant access.
 
 `order_refunded` often has no `subscription_id`. The webhook stores `order id → subscription id` when an event carries a valid order id, and a refund looks the subscription up from that key. Lemon order payloads have no `subscription_id`. If the order id is present and not mapped yet, the event is ignored. It does not revoke the install's best subscription.
 
@@ -127,11 +128,13 @@ Equal `updated_at` values are ties (Lemon's timestamp is second precision). The 
 
 The duplicate check, the subscription read, the tie-break, and the key writes run in one Redis `EVAL`. Redis does not roll a script back when it errors. The script returns normally after it claims the event. If the HTTP call itself fails, the event key is deleted so Lemon's retry can run. Duplicate `meta.webhook_id` values are skipped. An older `updated_at` is skipped.
 
-Redis keys are prefixed with `inv:<VERCEL_ENV>:` (`production`, `preview`, or `development`). When `VERCEL_ENV` is unset the prefix is `inv:local:`. A test-mode purchase on a preview deployment cannot write the production keys. `meta.test_mode: true` is still applied only when `VERCEL_ENV` is `preview`. Production without the Upstash env vars still returns 503. `NODE_ENV` does not allow test mode, and it does not choose the prefix.
+Redis keys are prefixed with `inv:<VERCEL_ENV>:` (`production`, `preview`, or `development`). Outside production, an unset `VERCEL_ENV` uses `inv:local:`. Production with Upstash credentials and an empty `VERCEL_ENV` returns 503 instead of that prefix. A test-mode purchase on a preview deployment cannot write the production keys. `meta.test_mode: true` is still applied only when `VERCEL_ENV` is `preview`. Production without the Upstash env vars still returns 503. `NODE_ENV` does not allow test mode, and it does not choose the prefix.
 
 ### Restore purchase
 
 Not in this release. The plan for a later pull request is [docs/RESTORE_FOLLOWUP.md](docs/RESTORE_FOLLOWUP.md): a one-time code to the order email or the unguessable receipt id, adding a device instead of moving the subscription, a global rate limit, and a subscription lookup by `order_id`.
+
+Until then, `/thanks`, the paywall, and `/pricing` point at `NEXT_PUBLIC_SUPPORT_EMAIL` when it is set. The manual steps, including the refund fallback, are in [docs/SUPPORT.md](docs/SUPPORT.md). `scripts/attach-device.ts` appends one install id after the stored order id matches the subscription.
 
 ### Demo vs production fallback
 

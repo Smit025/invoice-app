@@ -156,10 +156,18 @@ describe("entitlement store", () => {
     expect(entitlementKeyPrefix("pre view!")).toBe("inv:preview:");
   });
 
-  it("refuses to run in production without Redis credentials", () => {
+  it("refuses to run in production without Redis credentials or VERCEL_ENV", () => {
     expect(() => getEntitlementStore({ NODE_ENV: "production" })).toThrow(/not configured/);
+    expect(() =>
+      getEntitlementStore({
+        NODE_ENV: "production",
+        UPSTASH_REDIS_REST_URL: "https://example.upstash.io/",
+        UPSTASH_REDIS_REST_TOKEN: "token",
+      }),
+    ).toThrow(/not configured/);
     const store = getEntitlementStore({
       NODE_ENV: "production",
+      VERCEL_ENV: "production",
       UPSTASH_REDIS_REST_URL: "https://example.upstash.io/",
       UPSTASH_REDIS_REST_TOKEN: "token",
     });

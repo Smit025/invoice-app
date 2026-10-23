@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
+import { RecoveryNote } from "@/components/checkout/RecoveryNote";
 import { ThanksStatus } from "@/components/checkout/ThanksStatus";
 import { Button } from "@/components/ui/Button";
 import { PRICE_LABEL, RENEWAL_TERMS } from "@/lib/constants";
@@ -21,6 +22,7 @@ export default function ThanksPage() {
         every six months. {RENEWAL_TERMS}
       </p>
       <ThanksStatus />
+      <RecoveryNote className="mt-2 max-w-md text-sm leading-5 text-muted" />
       <Link href="/app" className="mt-6">
         <Button>Back to editor</Button>
       </Link>

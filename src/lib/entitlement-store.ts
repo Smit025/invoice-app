@@ -284,10 +284,13 @@ function restCredentials(env: Record<string, string | undefined>): { url: string
 export function getEntitlementStore(env: Record<string, string | undefined> = process.env): EntitlementStore {
   if (storeOverride) return storeOverride;
   const credentials = restCredentials(env);
-  if (credentials) {
-    return new UpstashEntitlementStore(credentials.url, credentials.token, fetch, entitlementKeyPrefix(env.VERCEL_ENV));
+  const vercelEnv = env.VERCEL_ENV?.trim();
+  if (env.NODE_ENV === "production" && (!credentials || !vercelEnv)) {
+    throw new EntitlementStoreNotConfiguredError();
   }
-  if (env.NODE_ENV === "production") throw new EntitlementStoreNotConfiguredError();
+  if (credentials) {
+    return new UpstashEntitlementStore(credentials.url, credentials.token, fetch, entitlementKeyPrefix(vercelEnv));
+  }
   return devMemory();
 }
 

@@ -249,13 +249,6 @@ if existing ~= nil then
   end
 end
 
-if existing ~= nil and existing.refunded == true and spec.action == "grant" and spec.reason ~= "payment_success" then
-  local variant = str(spec.variantId)
-  if variant == "" then variant = str(existing.variantId) end
-  return done("ignored", "ignore", "refunded", variant)
-end
-
-local prevDevices = devicesOf(existing)
 local devices = devicesOf(existing)
 local incomingUser = str(spec.userId)
 if #devices == 0 and incomingUser ~= "" then
@@ -302,6 +295,12 @@ else
   active = untilMs > nowMs
 end
 
+local holdRefund = existing ~= nil and existing.refunded == true and spec.action == "grant" and spec.reason ~= "payment_success"
+if holdRefund then
+  if str(spec.renewsAt) ~= "" then endsAt = str(spec.endsAt) end
+  active = false
+end
+
 local refunded = existing ~= nil and existing.refunded == true
 if spec.refund == true then refunded = true end
 if spec.action == "grant" and spec.reason == "payment_success" then refunded = false end
@@ -332,18 +331,6 @@ local record = {
 }
 
 redis.call("SET", prefix .. "sub:" .. subscriptionId, cjson.encode(record))
-
-for _, oldId in ipairs(prevDevices) do
-  if not contains(devices, oldId) then
-    local oldIds = readIndex(oldId)
-    local kept = {}
-    for _, id in ipairs(oldIds) do
-      if id ~= subscriptionId then table.insert(kept, id) end
-    end
-    writeIndex(oldId, kept)
-    pointUser(oldId, kept, nowMs)
-  end
-end
 
 for _, deviceId in ipairs(devices) do
   local ids = readIndex(deviceId)

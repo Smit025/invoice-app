@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/Button";
 import { CheckoutButtons } from "@/components/checkout/CheckoutButtons";
+import { RecoveryNote } from "@/components/checkout/RecoveryNote";
 import { PRICE_LABEL, RENEWAL_TERMS } from "@/lib/constants";
 import type { Metadata } from "next";
 
@@ -43,6 +44,7 @@ export default function PricingPage() {
           <CheckoutButtons showTerms={false} />
         </div>
         <p className="mt-3 text-sm leading-5 text-muted">{RENEWAL_TERMS}</p>
+        <RecoveryNote className="mt-2 text-sm leading-5 text-muted" />
         <div className="mt-6 flex gap-3">
           <Link href="/app">
             <Button>Create invoice</Button>

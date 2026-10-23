@@ -81,7 +81,19 @@ describe.skipIf(!redisUrl)("webhook lua against redis", () => {
 
   async function readSub(prefix: string, subscriptionId: string) {
     const raw = await client.get(`${prefix}sub:${subscriptionId}`);
-    return raw ? (JSON.parse(raw) as { renewsAt?: string; updatedAt?: string; updatedAtMs?: number; refunded?: boolean; active?: boolean; userId?: string; devices?: string[]; eventId?: string }) : null;
+    return raw
+      ? (JSON.parse(raw) as {
+          renewsAt?: string | null;
+          endsAt?: string | null;
+          updatedAt?: string;
+          updatedAtMs?: number;
+          refunded?: boolean;
+          active?: boolean;
+          userId?: string;
+          devices?: string[];
+          eventId?: string;
+        })
+      : null;
   }
 
   it("keeps the newer subscription when both orders run", async () => {
@@ -302,5 +314,80 @@ describe.skipIf(!redisUrl)("webhook lua against redis", () => {
     );
     expect(await readSub("inv:preview:", "sub_shared")).toMatchObject({ renewsAt: "2026-11-01T00:00:00.000Z" });
     expect(await readSub("inv:production:", "sub_shared")).toMatchObject({ renewsAt: "2027-01-01T00:00:00.000Z" });
+  });
+
+  it("regrants after a refund when the renewal update arrives before payment_success", async () => {
+    await apply(
+      "inv:local:",
+      spec({
+        eventId: "evt-created",
+        action: "grant",
+        reason: "active",
+        updatedAtMs: Date.parse("2026-10-01T00:00:00.000Z"),
+        eventTime: "2026-10-01T00:00:00.000Z",
+        renewsAt: "2026-11-01T00:00:00.000Z",
+      }),
+    );
+    await apply(
+      "inv:local:",
+      spec({
+        eventId: "evt-refund",
+        action: "revoke",
+        reason: "refunded",
+        refund: true,
+        status: "refunded",
+        dateMode: "set",
+        endsAt: "2026-10-02T00:00:00.000Z",
+        renewsAt: null,
+        updatedAtMs: Date.parse("2026-10-02T00:00:00.000Z"),
+        eventTime: "2026-10-02T00:00:00.000Z",
+      }),
+    );
+    const updated = await apply(
+      "inv:local:",
+      spec({
+        eventId: "evt-renew",
+        action: "grant",
+        reason: "active",
+        dateMode: "fill",
+        status: "active",
+        endsAt: null,
+        renewsAt: "2026-12-01T00:00:00.000Z",
+        updatedAtMs: Date.parse("2026-11-01T00:00:00.000Z"),
+        eventTime: "2026-11-01T00:00:00.000Z",
+      }),
+    );
+    expect(updated).toMatchObject({ result: "applied" });
+    expect(await readSub("inv:local:", "sub_race")).toMatchObject({
+      refunded: true,
+      active: false,
+      renewsAt: "2026-12-01T00:00:00.000Z",
+      endsAt: null,
+    });
+
+    const paid = await apply(
+      "inv:local:",
+      spec({
+        eventId: "evt-paid",
+        action: "grant",
+        reason: "payment_success",
+        dateMode: "fill",
+        status: "paid",
+        plan: null,
+        variantId: null,
+        reuseStoredPlan: true,
+        amounts: [],
+        endsAt: null,
+        renewsAt: null,
+        updatedAtMs: Date.parse("2026-11-01T00:00:01.000Z"),
+        eventTime: "2026-11-01T00:00:01.000Z",
+      }),
+    );
+    expect(paid).toMatchObject({ result: "applied", reason: "payment_success" });
+    expect(await readSub("inv:local:", "sub_race")).toMatchObject({
+      refunded: false,
+      active: true,
+      renewsAt: "2026-12-01T00:00:00.000Z",
+    });
   });
 });

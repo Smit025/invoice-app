@@ -5,6 +5,7 @@ import { sampleInvoice } from "@/lib/invoice";
 import { Modal } from "@/components/ui/Modal";
 import { InvoiceDocument } from "@/components/templates/InvoiceDocument";
 import { CheckoutButtons } from "@/components/checkout/CheckoutButtons";
+import { RecoveryNote } from "@/components/checkout/RecoveryNote";
 import { useInvoice } from "@/components/editor/InvoiceStore";
 
 const COPY: Record<string, { title: string; body: string }> = {
@@ -69,6 +70,7 @@ export function PaywallModal() {
       <div className="mt-4">
         <CheckoutButtons onContinueFree={closePaywall} />
       </div>
+      <RecoveryNote className="mt-3 text-sm leading-5 text-muted" />
     </Modal>
   );
 }

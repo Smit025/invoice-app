@@ -214,9 +214,8 @@ export function applyWebhookState(state: WebhookState, spec: WebhookSpec): Persi
     };
   }
 
-  if (existing?.refunded && spec.action === "grant" && spec.reason !== "payment_success") {
-    return ignored(spec, "refunded", spec.variantId ?? existing.variantId);
-  }
+  const holdRefund =
+    Boolean(existing?.refunded) && spec.action === "grant" && spec.reason !== "payment_success";
 
   const devices = deviceIds(existing);
   if (devices.length === 0 && spec.userId) devices.push(spec.userId);
@@ -257,6 +256,13 @@ export function applyWebhookState(state: WebhookState, spec: WebhookSpec): Persi
     endsAt = mergeDate(spec.dateMode, spec.endsAt, existing?.endsAt);
     renewsAt = mergeDate(spec.dateMode, spec.renewsAt, existing?.renewsAt);
     active = accessIsFuture(endsAt, renewsAt, spec.nowMs);
+  }
+
+  // A refund's endsAt is "now", which would hide a later renews_at. Keep the
+  // new period, but leave Pro off until payment_success clears the refund.
+  if (holdRefund) {
+    if (spec.renewsAt) endsAt = spec.endsAt;
+    active = false;
   }
 
   let refunded = Boolean(existing?.refunded);

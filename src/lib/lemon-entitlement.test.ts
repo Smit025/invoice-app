@@ -165,7 +165,79 @@ describe("atomic entitlement updates", () => {
       { storeId: STORE, now: NOW },
     );
 
-    expect(await store.getBySubscriptionId("sub_race")).toMatchObject({ active: false, refunded: true });
+    expect(await store.getBySubscriptionId("sub_race")).toMatchObject({
+      active: false,
+      refunded: true,
+      renewsAt: "2027-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("regrants Pro when a renewal update arrives before payment_success", async () => {
+    const store = new MemoryEntitlementStore();
+    await persistLemonWebhook(
+      subscription({
+        event: "subscription_created",
+        webhookId: "evt-created",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+        renewsAt: "2026-11-01T00:00:00.000Z",
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    await persistLemonWebhook(
+      subscription({
+        event: "subscription_payment_refunded",
+        webhookId: "evt-refund",
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        status: "refunded",
+        renewsAt: null,
+        endsAt: "2026-10-02T00:00:00.000Z",
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    const updated = await persistLemonWebhook(
+      subscription({
+        event: "subscription_updated",
+        webhookId: "evt-renew",
+        updatedAt: "2026-11-01T00:00:00.000Z",
+        status: "active",
+        renewsAt: "2026-12-01T00:00:00.000Z",
+        endsAt: null,
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    expect(updated).toMatchObject({ result: "applied" });
+    expect(await store.getBySubscriptionId("sub_race")).toMatchObject({
+      active: false,
+      refunded: true,
+      renewsAt: "2026-12-01T00:00:00.000Z",
+      endsAt: null,
+    });
+
+    const paid = await persistLemonWebhook(
+      subscription({
+        event: "subscription_payment_success",
+        type: "subscription-invoices",
+        id: "inv_renew",
+        subscriptionId: "sub_race",
+        webhookId: "evt-paid",
+        updatedAt: "2026-11-01T00:00:01.000Z",
+        status: "paid",
+        variantId: null,
+        renewsAt: null,
+        endsAt: null,
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    expect(paid).toMatchObject({ result: "applied", reason: "payment_success" });
+    expect(await store.getBySubscriptionId("sub_race")).toMatchObject({
+      active: true,
+      refunded: false,
+      renewsAt: "2026-12-01T00:00:00.000Z",
+    });
   });
 
   it("resolves payment_success with no variant_id from the stored subscription", async () => {
