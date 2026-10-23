@@ -1,6 +1,5 @@
 import { DRAFT_KEY, PRO_KEY } from "./constants";
-import { isStoredProActive, serializeProAccess } from "./pro-access";
-import type { CheckoutPlan } from "./lemon-config";
+import { isStoredProActive } from "./pro-access";
 import { createDefaultInvoice, emptyAddress, emptyItem } from "./invoice";
 import { isAllowedLogoDataUrl } from "./logo";
 import { clampNonNegative, clampTaxRate } from "./tax";
@@ -156,9 +155,9 @@ export function writeDraftStore(store: DraftStore, isPro: boolean): void {
   }
 }
 
-export function readIsPro(now = new Date()): boolean {
+export function readIsPro(): boolean {
   if (typeof window === "undefined") return false;
-  return isStoredProActive(window.localStorage.getItem(PRO_KEY), now);
+  return isStoredProActive(window.localStorage.getItem(PRO_KEY));
 }
 
 export function writeIsPro(value: boolean): void {
@@ -166,15 +165,6 @@ export function writeIsPro(value: boolean): void {
   try {
     if (value) window.localStorage.setItem(PRO_KEY, "1");
     else window.localStorage.removeItem(PRO_KEY);
-  } catch (error) {
-    if (!isQuotaExceeded(error)) throw error;
-  }
-}
-
-export function writeProAccess(record: { plan: CheckoutPlan; expiresAt: string }): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(PRO_KEY, serializeProAccess(record));
   } catch (error) {
     if (!isQuotaExceeded(error)) throw error;
   }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/Button";
 import { CheckoutButtons } from "@/components/checkout/CheckoutButtons";
-import { PRICE_LABEL } from "@/lib/constants";
+import { PRICE_LABEL, RENEWAL_TERMS } from "@/lib/constants";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -29,13 +29,20 @@ export default function PricingPage() {
           <div className="rounded-xl border border-accent p-5">
             <p className="font-semibold text-accent">Pro — {PRICE_LABEL.monthly}</p>
             <p className="mt-1 text-sm text-muted">
-              {`No watermark, logo upload, unlimited drafts on this device. ${PRICE_LABEL.sixMonth}.`}
+              No watermark, logo upload, and unlimited drafts on this device. Renews monthly.
             </p>
-            <div className="mt-4">
-              <CheckoutButtons />
-            </div>
+          </div>
+          <div className="rounded-xl border border-accent p-5">
+            <p className="font-semibold text-accent">Pro — {PRICE_LABEL.sixMonth}</p>
+            <p className="mt-1 text-sm text-muted">
+              No watermark, logo upload, and unlimited drafts on this device. Renews every six months.
+            </p>
           </div>
         </div>
+        <div className="mt-4">
+          <CheckoutButtons showTerms={false} />
+        </div>
+        <p className="mt-3 text-sm leading-5 text-muted">{RENEWAL_TERMS}</p>
         <div className="mt-6 flex gap-3">
           <Link href="/app">
             <Button>Create invoice</Button>

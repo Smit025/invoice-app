@@ -184,8 +184,8 @@ export function LandingPage() {
               </div>
               <div className="rounded-xl border border-accent bg-bg p-6">
                 <p className="text-sm font-medium text-accent">Pro</p>
-                <p className="mt-2 text-[36px] font-semibold leading-[44px]">{PRICE_LABEL.monthly}</p>
-                <p className="text-sm text-muted">{PRICE_LABEL.sixMonth}</p>
+                <p className="mt-2 text-sm leading-5 text-text">Monthly — {PRICE_LABEL.monthly}</p>
+                <p className="text-sm leading-5 text-text">Every 6 months — {PRICE_LABEL.sixMonth}</p>
                 <ul className="mt-4 space-y-2 text-sm leading-5 text-muted">
                   <li>No watermark on preview or PDF</li>
                   <li>Logo on every invoice</li>

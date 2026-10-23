@@ -1,190 +1,199 @@
 import { describe, expect, it } from "vitest";
 import { LEMON_VARIANT_IDS } from "./lemon-config";
-import { readCheckoutSuccess } from "./lemon-checkout-success";
-import {
-  applyLicenseDecision,
-  licenseIsActive,
-  resolveLemonLicense,
-  type StoredLicense,
-} from "./lemon-license";
+import { resolveLemonLicense } from "./lemon-license";
 
 const NOW = new Date("2026-10-23T00:00:00.000Z");
 const FUTURE = "2026-11-23T00:00:00.000Z";
 const PAST = "2026-10-01T00:00:00.000Z";
+const USER = "11111111-1111-4111-8111-111111111111";
+const STORE = "123";
 
 function subscription(
   event: string,
   variantId: string,
   attributes: Record<string, unknown> = {},
-  id = "sub_1",
+  meta: Record<string, unknown> = {},
 ) {
   return {
-    meta: { event_name: event },
+    meta: { event_name: event, custom_data: { user_id: USER }, ...meta },
     data: {
       type: "subscriptions",
-      id,
+      id: "sub_1",
       attributes: {
+        store_id: Number(STORE),
         variant_id: Number(variantId),
         status: "active",
+        renews_at: FUTURE,
         ends_at: null,
+        updated_at: NOW.toISOString(),
+        currency: "USD",
+        subtotal: variantId === LEMON_VARIANT_IDS.monthly ? 299 : 799,
         ...attributes,
       },
     },
   };
 }
 
-function activeNow(store: Map<string, StoredLicense>, id = "sub_1", now = NOW) {
-  return licenseIsActive(store.get(id), now);
+function decide(payload: unknown, extra?: { production?: boolean; storeId?: string }) {
+  return resolveLemonLicense(payload, {
+    now: NOW,
+    storeId: extra?.storeId ?? STORE,
+    production: extra?.production ?? false,
+  });
 }
 
-describe("subscription license unlock", () => {
+describe("subscription license decisions", () => {
   it.each([
     ["monthly", LEMON_VARIANT_IDS.monthly],
     ["sixMonth", LEMON_VARIANT_IDS.sixMonth],
-  ] as const)("Pro ends when a %s subscription expires", (plan, variantId) => {
-    const store = new Map<string, StoredLicense>();
+  ] as const)("grants an active %s subscription and revokes it when it expires", (plan, variantId) => {
+    expect(decide(subscription("subscription_created", variantId)).action).toBe("grant");
+    expect(decide(subscription("subscription_created", variantId))).toMatchObject({
+      active: true,
+      plan,
+      variantId,
+      userId: USER,
+    });
 
-    const created = resolveLemonLicense(
-      subscription("subscription_created", variantId, { status: "active", user_email: "hidden@example.com" }),
-      { now: NOW },
-    );
-    expect(created).toMatchObject({ action: "grant", active: true, plan, variantId });
-    applyLicenseDecision(store, created);
-    expect(activeNow(store)).toBe(true);
-
-    const updated = resolveLemonLicense(
-      subscription("subscription_updated", variantId, { status: "active", renews_at: FUTURE }),
-      { now: NOW },
-    );
-    expect(updated.action).toBe("grant");
-    applyLicenseDecision(store, updated);
-
-    const paid = resolveLemonLicense(
-      {
-        meta: { event_name: "subscription_payment_success" },
-        data: {
-          type: "subscription-invoices",
-          id: "inv_1",
-          attributes: {
-            subscription_id: "sub_1",
-            status: "paid",
-            subtotal: plan === "monthly" ? 299 : 799,
-            currency: "USD",
-            user_email: "hidden@example.com",
-          },
-        },
-      },
-      { now: NOW },
-    );
-    expect(paid).toMatchObject({ action: "grant", active: true, plan, variantId, subjectId: "sub_1" });
-    applyLicenseDecision(store, paid);
-    expect(activeNow(store)).toBe(true);
-
-    const cancelled = resolveLemonLicense(
-      subscription("subscription_cancelled", variantId, { status: "cancelled", ends_at: FUTURE }),
-      { now: NOW },
-    );
-    expect(cancelled).toMatchObject({
+    expect(
+      decide(subscription("subscription_cancelled", variantId, { status: "cancelled", ends_at: FUTURE })),
+    ).toMatchObject({
       action: "grant",
       active: true,
       endsAt: FUTURE,
+      renewsAt: null,
       reason: "cancelled_until_period_end",
     });
-    applyLicenseDecision(store, cancelled);
-    expect(activeNow(store, "sub_1", NOW)).toBe(true);
-    expect(activeNow(store, "sub_1", new Date(FUTURE))).toBe(false);
 
-    const expired = resolveLemonLicense(
-      subscription("subscription_expired", variantId, { status: "expired", ends_at: FUTURE }),
-      { now: NOW },
-    );
-    expect(expired).toMatchObject({ action: "revoke", active: false, plan, reason: "expired" });
-    applyLicenseDecision(store, expired);
-    expect(activeNow(store)).toBe(false);
+    expect(
+      decide(subscription("subscription_expired", variantId, { status: "expired", ends_at: PAST })),
+    ).toMatchObject({ action: "revoke", active: false, reason: "expired" });
   });
 
-  it("matches payment success by price when the invoice has no variant id", () => {
+  it("does not identify a plan from price alone or from custom data", () => {
     expect(
-      resolveLemonLicense(
-        {
-          meta: { event_name: "subscription_payment_success" },
-          data: { type: "subscription-invoices", id: "inv_9", attributes: { subscription_id: 9, subtotal: 299, status: "paid" } },
+      decide({
+        meta: {
+          event_name: "subscription_payment_success",
+          custom_data: { user_id: USER, variant_id: LEMON_VARIANT_IDS.sixMonth },
         },
-        { now: NOW },
-      ).plan,
-    ).toBe("monthly");
-
-    expect(
-      resolveLemonLicense(
-        {
-          meta: { event_name: "subscription_payment_success" },
-          data: {
-            type: "subscription-invoices",
-            id: "inv_8",
-            attributes: { subscription_id: 8, subtotal_usd: 799, total: 850, status: "paid" },
+        data: {
+          type: "subscription-invoices",
+          id: "inv_9",
+          attributes: {
+            store_id: Number(STORE),
+            subscription_id: 9,
+            subtotal: 799,
+            currency: "USD",
+            status: "paid",
           },
         },
-        { now: NOW },
-      ).plan,
-    ).toBe("sixMonth");
+      }),
+    ).toMatchObject({ action: "ignore", reason: "unknown_variant" });
   });
 
-  it("does not grant an unknown variant or a permanent order", () => {
+  it("rejects a mismatched currency or amount when the variant is known", () => {
     expect(
-      resolveLemonLicense(subscription("subscription_created", "999", { status: "active" }), { now: NOW }).action,
-    ).toBe("ignore");
+      decide(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, { currency: "EUR", subtotal: 299 }))
+        .reason,
+    ).toBe("price_mismatch");
+    expect(
+      decide(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, { currency: "USD", subtotal: 799 }))
+        .reason,
+    ).toBe("price_mismatch");
+  });
 
-    const order = resolveLemonLicense(
-      {
-        meta: { event_name: "order_created" },
+  it("does not grant an unknown variant, a permanent order, or the wrong store", () => {
+    expect(decide(subscription("subscription_created", "999")).action).toBe("ignore");
+    expect(
+      decide({
+        meta: { event_name: "order_created", custom_data: { variant_id: LEMON_VARIANT_IDS.sixMonth } },
         data: {
           type: "orders",
           id: "ord_1",
-          attributes: { first_order_item: { variant_id: Number(LEMON_VARIANT_IDS.sixMonth) }, status: "paid" },
+          attributes: {
+            store_id: Number(STORE),
+            first_order_item: { variant_id: Number(LEMON_VARIANT_IDS.sixMonth) },
+            status: "paid",
+          },
         },
-      },
-      { now: NOW },
+      }),
+    ).toMatchObject({ action: "ignore", reason: "not_a_license_event" });
+    expect(decide(subscription("subscription_created", LEMON_VARIANT_IDS.monthly), { storeId: "999" }).reason).toBe(
+      "store_mismatch",
     );
-    expect(order).toMatchObject({ action: "ignore", active: false });
   });
 
-  it("revokes a cancelled subscription once ends_at is in the past", () => {
-    const decision = resolveLemonLicense(
-      subscription("subscription_cancelled", LEMON_VARIANT_IDS.monthly, { status: "cancelled", ends_at: PAST }),
-      { now: NOW },
-    );
-    expect(decision).toMatchObject({ action: "revoke", active: false });
+  it("keeps a cancelled subscription only until ends_at", () => {
+    expect(
+      decide(subscription("subscription_cancelled", LEMON_VARIANT_IDS.monthly, { status: "cancelled", ends_at: PAST })),
+    ).toMatchObject({ action: "revoke", active: false });
   });
 
-  it("revokes an expired or disabled license key for either variant", () => {
-    const expired = resolveLemonLicense(
-      {
-        meta: { event_name: "license_key_updated", custom_data: { variant_id: LEMON_VARIANT_IDS.sixMonth } },
-        data: { type: "license-keys", id: "lic_1", attributes: { status: "expired", expires_at: PAST } },
-      },
-      { now: NOW },
+  it("does not extend access for payment failure or past_due", () => {
+    expect(decide(subscription("subscription_payment_failed", LEMON_VARIANT_IDS.monthly, { status: "paid" }))).toMatchObject(
+      { action: "no_extend", reason: "payment_failed", dateMode: "keep" },
     );
-    expect(expired).toMatchObject({ action: "revoke", active: false, plan: "sixMonth" });
+    expect(
+      decide(subscription("subscription_updated", LEMON_VARIANT_IDS.monthly, { status: "past_due", renews_at: "2027-01-01T00:00:00.000Z" })),
+    ).toMatchObject({ action: "no_extend", reason: "past_due", dateMode: "keep" });
+    expect(
+      decide(subscription("subscription_updated", LEMON_VARIANT_IDS.sixMonth, { status: "unpaid" })),
+    ).toMatchObject({ action: "no_extend", reason: "unpaid" });
+  });
 
-    const disabled = resolveLemonLicense(
-      {
-        meta: { event_name: "license_key_updated" },
+  it("maps pause, resume, unpause, and refunds", () => {
+    expect(decide(subscription("subscription_paused", LEMON_VARIANT_IDS.monthly, { status: "paused" })).action).toBe(
+      "pause",
+    );
+    expect(decide(subscription("subscription_resumed", LEMON_VARIANT_IDS.monthly, { status: "active" }))).toMatchObject({
+      action: "grant",
+      reason: "resumed",
+    });
+    expect(decide(subscription("subscription_unpaused", LEMON_VARIANT_IDS.sixMonth, { status: "active" })).reason).toBe(
+      "unpaused",
+    );
+    expect(decide(subscription("subscription_payment_refunded", LEMON_VARIANT_IDS.monthly)).reason).toBe("refunded");
+    expect(
+      decide({
+        meta: { event_name: "order_refunded", custom_data: { user_id: USER } },
+        data: {
+          type: "orders",
+          id: "ord_9",
+          attributes: {
+            store_id: Number(STORE),
+            subscription_id: "sub_1",
+            currency: "USD",
+            subtotal: 799,
+            first_order_item: { variant_id: Number(LEMON_VARIANT_IDS.sixMonth) },
+            updated_at: NOW.toISOString(),
+          },
+        },
+      }),
+    ).toMatchObject({ action: "revoke", reason: "refunded", plan: "sixMonth" });
+  });
+
+  it("rejects test mode in production and ignores a license variant that only lives in custom data", () => {
+    expect(
+      decide(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, {}, { test_mode: true }), {
+        production: true,
+      }).reason,
+    ).toBe("test_mode");
+    expect(
+      decide(subscription("subscription_created", LEMON_VARIANT_IDS.monthly, {}, { test_mode: true }), {
+        production: false,
+      }).action,
+    ).toBe("grant");
+
+    expect(
+      decide({
+        meta: { event_name: "license_key_updated", custom_data: { variant_id: LEMON_VARIANT_IDS.sixMonth, user_id: USER } },
         data: {
           type: "license-keys",
-          id: "lic_2",
-          attributes: { variant_id: LEMON_VARIANT_IDS.monthly, status: "disabled" },
+          id: "lic_1",
+          attributes: { store_id: Number(STORE), status: "expired", expires_at: PAST },
         },
-      },
-      { now: NOW },
-    );
-    expect(disabled.action).toBe("revoke");
-  });
-
-  it("reads variant and renewal hints from a Checkout.Success payload", () => {
-    expect(
-      readCheckoutSuccess({
-        order: { data: { attributes: { first_order_item: { variant_id: 2238873 }, renews_at: FUTURE } } },
-      }),
-    ).toEqual({ variantId: "2238873", renewsAt: FUTURE });
+      }).reason,
+    ).toBe("unknown_variant");
   });
 });

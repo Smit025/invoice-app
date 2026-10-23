@@ -35,6 +35,9 @@ export function proPlanButtonLabel(plan: keyof typeof PRICE_LABEL): string {
   return `Unlock Pro — ${PRICE_LABEL[plan]}`;
 }
 
+export const RENEWAL_TERMS =
+  "Renews automatically until cancelled. Cancel anytime from the link in your receipt email; Pro stays active until the end of the paid period.";
+
 export const TEMPLATES: Array<{
   id: "classic" | "minimal" | "bold";
   name: string;

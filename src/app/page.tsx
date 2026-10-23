@@ -11,11 +11,11 @@ const jsonLd = {
     "Free invoices with VAT and sales tax in USD, EUR, or GBP. Built for EU and US freelancers. Create and download a PDF in the browser — no signup.",
   offers: {
     "@type": "AggregateOffer",
-    lowPrice: "0",
+    lowPrice: String(PRICING.monthly),
     highPrice: String(PRICING.sixMonth),
     priceCurrency: "USD",
-    offerCount: "3",
-    description: `Free, or Pro ${PRICE_LABEL.monthly}, or Pro ${PRICE_LABEL.sixMonth}.`,
+    offerCount: "2",
+    description: `Pro ${PRICE_LABEL.monthly}, or Pro ${PRICE_LABEL.sixMonth}.`,
   },
 };
 

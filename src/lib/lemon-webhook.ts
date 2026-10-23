@@ -6,10 +6,16 @@ export const LEMON_SUBSCRIPTION_EVENTS = [
   "subscription_cancelled",
   "subscription_expired",
   "subscription_payment_success",
+  "subscription_payment_failed",
+  "subscription_payment_refunded",
+  "subscription_resumed",
+  "subscription_paused",
+  "subscription_unpaused",
 ] as const;
 
 export const LEMON_LICENSE_EVENTS = [
   ...LEMON_SUBSCRIPTION_EVENTS,
+  "order_refunded",
   "license_key_created",
   "license_key_updated",
 ] as const;
@@ -45,12 +51,21 @@ export function verifyLemonSignature(
   return crypto.timingSafeEqual(digest, signature);
 }
 
-export function getLemonEventName(payload: unknown): string | undefined {
+function readMeta(payload: unknown): Record<string, unknown> | undefined {
   if (!payload || typeof payload !== "object") return undefined;
   const meta = (payload as { meta?: unknown }).meta;
-  if (!meta || typeof meta !== "object") return undefined;
-  const eventName = (meta as { event_name?: unknown }).event_name;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return undefined;
+  return meta as Record<string, unknown>;
+}
+
+export function getLemonEventName(payload: unknown): string | undefined {
+  const eventName = readMeta(payload)?.event_name;
   return typeof eventName === "string" ? eventName : undefined;
+}
+
+/** Lemon sets `meta.test_mode` on events from test mode. Reject those in production. */
+export function isLemonTestMode(payload: unknown): boolean {
+  return readMeta(payload)?.test_mode === true;
 }
 
 export function isLemonEntitlementEvent(eventName: string | undefined): eventName is LemonLicenseEvent {

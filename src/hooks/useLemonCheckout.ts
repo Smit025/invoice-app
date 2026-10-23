@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { rememberCheckoutPlan } from "@/lib/checkout-intent";
+import { getOrCreateInstallId } from "@/lib/install-id";
 import {
   getLemonPublicConfig,
   getPublicCheckoutUrl,
   isDirectBuyUrl,
   resolvePaywallCheckout,
+  withCheckoutUserId,
   type CheckoutPlan,
 } from "@/lib/lemon-config";
 import { unlockProLocally } from "@/lib/pro";
@@ -54,8 +55,7 @@ export function useLemonCheckout() {
         showToast("Checkout is unavailable right now. Try again in a moment.");
         return;
       }
-      rememberCheckoutPlan(plan);
-      await openLemonOverlay(url);
+      await openLemonOverlay(withCheckoutUserId(url, getOrCreateInstallId()));
     } catch {
       showToast("Could not open checkout. Check your connection and try again.");
     } finally {

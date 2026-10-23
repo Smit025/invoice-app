@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { resolveLemonLicense } from "@/lib/lemon-license";
+import {
+  EntitlementStoreNotConfiguredError,
+  getEntitlementStore,
+} from "@/lib/entitlement-store";
+import { persistLemonWebhook } from "@/lib/lemon-entitlement";
+import { getLemonServerConfig } from "@/lib/lemon-server";
 import { getLemonEventName, summarizeLemonWebhook, verifyLemonSignature } from "@/lib/lemon-webhook";
 
 export const runtime = "nodejs";
@@ -32,31 +37,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  const storeId = getLemonServerConfig().storeId;
+  if (!storeId) {
+    return NextResponse.json({ error: "LEMONSQUEEZY_STORE_ID is not set" }, { status: 503 });
+  }
+
+  let store;
+  try {
+    store = getEntitlementStore();
+  } catch (error) {
+    if (error instanceof EntitlementStoreNotConfiguredError) {
+      return NextResponse.json({ error: "Entitlement store is not configured" }, { status: 503 });
+    }
+    throw error;
+  }
+
+  let outcome;
+  try {
+    outcome = await persistLemonWebhook(payload, store, {
+      storeId,
+      production: process.env.NODE_ENV === "production",
+    });
+  } catch (error) {
+    if (error instanceof EntitlementStoreNotConfiguredError) {
+      return NextResponse.json({ error: "Entitlement store is not configured" }, { status: 503 });
+    }
+    console.error("[lemonsqueezy webhook] store failed");
+    return NextResponse.json({ error: "Entitlement store request failed" }, { status: 500 });
+  }
+
   const eventName = getLemonEventName(payload);
   const summary = summarizeLemonWebhook(payload);
-  const decision = resolveLemonLicense(payload);
-
   console.info("[lemonsqueezy webhook]", eventName ?? "unknown", {
     id: summary.id,
     type: summary.type,
-    action: decision.action,
-    active: decision.active,
-    variantId: decision.variantId,
+    action: outcome.action,
+    variantId: outcome.variantId,
   });
 
-  return NextResponse.json(
-    {
-      ok: true,
-      license: {
-        event: decision.event ?? null,
-        action: decision.action,
-        active: decision.active,
-        plan: decision.plan,
-        variantId: decision.variantId,
-        endsAt: decision.endsAt,
-        reason: decision.reason,
-      },
-    },
-    { status: 200 },
-  );
+  return NextResponse.json({ ok: true }, { status: 200 });
 }

@@ -62,8 +62,8 @@ export function PaywallModal() {
       </div>
 
       <div className="mt-4 rounded-lg bg-surface p-3">
-        <p className="text-sm font-semibold">{PRICE_LABEL.monthly}</p>
-        <p className="text-sm text-muted">{PRICE_LABEL.sixMonth} · USD</p>
+        <p className="text-sm font-semibold">Monthly — {PRICE_LABEL.monthly}</p>
+        <p className="text-sm text-muted">Every 6 months — {PRICE_LABEL.sixMonth}</p>
       </div>
 
       <div className="mt-4">

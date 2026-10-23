@@ -46,6 +46,12 @@ describe("webhook payload helpers", () => {
     expect(isLemonEntitlementEvent("subscription_cancelled")).toBe(true);
     expect(isLemonEntitlementEvent("subscription_expired")).toBe(true);
     expect(isLemonEntitlementEvent("subscription_payment_success")).toBe(true);
+    expect(isLemonEntitlementEvent("subscription_payment_failed")).toBe(true);
+    expect(isLemonEntitlementEvent("subscription_payment_refunded")).toBe(true);
+    expect(isLemonEntitlementEvent("subscription_resumed")).toBe(true);
+    expect(isLemonEntitlementEvent("subscription_paused")).toBe(true);
+    expect(isLemonEntitlementEvent("subscription_unpaused")).toBe(true);
+    expect(isLemonEntitlementEvent("order_refunded")).toBe(true);
     expect(summarizeLemonWebhook(payload)).toEqual({
       event: "license_key_created",
       id: "99",

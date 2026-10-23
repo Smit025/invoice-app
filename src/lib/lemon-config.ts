@@ -28,16 +28,15 @@ export type LemonPublicConfig = {
   monthlyUrl: string;
 };
 
-const SIX_MONTH_URL_KEYS = [
-  "LEMONSQUEEZY_CHECKOUT_URL",
-  "NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL",
-  "NEXT_PUBLIC_CHECKOUT_URL",
-] as const;
+/** Checkout UUIDs for the two live buy links. Anything else is ignored. */
+export const LIVE_CHECKOUT_IDS = {
+  sixMonth: "f1ffee5b-5cbe-4c44-ba12-1ec93b520ca2",
+  monthly: "bd2f2883-79ba-47ec-8610-3287ee80846b",
+} as const;
 
-const MONTHLY_URL_KEYS = [
-  "LEMONSQUEEZY_CHECKOUT_URL_MONTHLY",
-  "NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY",
-] as const;
+const SIX_MONTH_URL_KEYS = ["NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL"] as const;
+
+const MONTHLY_URL_KEYS = ["NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY"] as const;
 
 function trimEnv(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -70,33 +69,52 @@ export function isDirectBuyUrl(value: string | undefined): string | undefined {
   return trimmed;
 }
 
-function firstBuyUrl(env: EnvMap, keys: readonly string[], fallback: string): string {
+/** True only for one of the two live `/checkout/buy/` links (uuid + enabled variant). */
+export function isAllowlistedBuyUrl(value: string | undefined, plan: CheckoutPlan): boolean {
+  const accepted = isDirectBuyUrl(value);
+  if (!accepted) return false;
+  let url: URL;
+  try {
+    url = new URL(accepted);
+  } catch {
+    return false;
+  }
+  const id = url.pathname.split("/checkout/buy/")[1]?.split("/")[0] ?? "";
+  if (id !== LIVE_CHECKOUT_IDS[plan]) return false;
+  return url.searchParams.get("enabled") === LEMON_VARIANT_IDS[plan];
+}
+
+function allowlistedOrDefault(env: EnvMap, keys: readonly string[], plan: CheckoutPlan, fallback: string): string {
   for (const key of keys) {
-    const accepted = isDirectBuyUrl(env[key]);
-    if (accepted) return accepted;
+    if (isAllowlistedBuyUrl(env[key], plan)) return fallback;
   }
   return fallback;
 }
 
 function readPublicEnv(): EnvMap {
-  // Next.js inlines `process.env.NEXT_PUBLIC_*` (and `env` keys from next.config)
-  // only for direct member access. Passing `process.env` is not inlined.
+  // Next.js inlines `process.env.NEXT_PUBLIC_*` only for direct member access.
   return {
-    LEMONSQUEEZY_CHECKOUT_URL: process.env.LEMONSQUEEZY_CHECKOUT_URL,
-    LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: process.env.LEMONSQUEEZY_CHECKOUT_URL_MONTHLY,
     NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL,
     NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY:
       process.env.NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY,
-    NEXT_PUBLIC_CHECKOUT_URL: process.env.NEXT_PUBLIC_CHECKOUT_URL,
     NODE_ENV: process.env.NODE_ENV,
   };
 }
 
 export function getLemonPublicConfig(env: EnvMap = readPublicEnv()): LemonPublicConfig {
   return {
-    sixMonthUrl: firstBuyUrl(env, SIX_MONTH_URL_KEYS, DEFAULT_LEMONSQUEEZY_CHECKOUT_URL),
-    monthlyUrl: firstBuyUrl(env, MONTHLY_URL_KEYS, DEFAULT_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY),
+    sixMonthUrl: allowlistedOrDefault(env, SIX_MONTH_URL_KEYS, "sixMonth", DEFAULT_LEMONSQUEEZY_CHECKOUT_URL),
+    monthlyUrl: allowlistedOrDefault(env, MONTHLY_URL_KEYS, "monthly", DEFAULT_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY),
   };
+}
+
+/** Appends `checkout[custom][user_id]`, with the id percent-encoded and the brackets left intact. */
+export function withCheckoutUserId(buyUrl: string, userId: string): string {
+  const url = new URL(buyUrl);
+  const query = new URLSearchParams(url.search).toString();
+  const user = `checkout[custom][user_id]=${encodeURIComponent(userId)}`;
+  const base = `${url.origin}${url.pathname}`;
+  return query ? `${base}?${query}&${user}` : `${base}?${user}`;
 }
 
 export function getPublicCheckoutUrl(plan: CheckoutPlan, env: EnvMap = readPublicEnv()): string {

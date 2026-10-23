@@ -4,11 +4,13 @@ import {
   DEFAULT_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY,
   getLemonPublicConfig,
   getPublicCheckoutUrl,
+  isAllowlistedBuyUrl,
   isDemoCheckoutAllowed,
   isDirectBuyUrl,
   LEMON_VARIANT_IDS,
   resolvePaywallCheckout,
   RETIRED_TEST_CHECKOUT_ID,
+  withCheckoutUserId,
 } from "./lemon-config";
 
 const LIVE_SIX =
@@ -42,37 +44,36 @@ describe("getPublicCheckoutUrl", () => {
     vi.unstubAllEnvs();
   });
 
-  it("prefers LEMONSQUEEZY_CHECKOUT_URL over the public aliases", () => {
-    const env = {
-      LEMONSQUEEZY_CHECKOUT_URL: " https://store.lemonsqueezy.com/checkout/buy/six-live ",
-      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: "https://store.lemonsqueezy.com/checkout/buy/six-old",
-      NEXT_PUBLIC_CHECKOUT_URL: "https://store.lemonsqueezy.com/checkout/buy/six-older",
-      LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: "https://store.lemonsqueezy.com/checkout/buy/mo-live",
-      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: "https://store.lemonsqueezy.com/checkout/buy/mo-old",
-    };
-
-    expect(getPublicCheckoutUrl("sixMonth", env)).toBe(
-      "https://store.lemonsqueezy.com/checkout/buy/six-live",
-    );
-    expect(getPublicCheckoutUrl("monthly", env)).toBe(
-      "https://store.lemonsqueezy.com/checkout/buy/mo-live",
+  it("allowlists only the two live buy links", () => {
+    expect(isAllowlistedBuyUrl(LIVE_SIX, "sixMonth")).toBe(true);
+    expect(isAllowlistedBuyUrl(LIVE_MONTHLY, "monthly")).toBe(true);
+    expect(isAllowlistedBuyUrl(LIVE_SIX, "monthly")).toBe(false);
+    expect(isAllowlistedBuyUrl("https://store.lemonsqueezy.com/checkout/buy/not-live?enabled=2238798", "sixMonth")).toBe(
+      false,
     );
   });
 
-  it("falls back to NEXT_PUBLIC_CHECKOUT_URL for the 6-month plan", () => {
+  it("ignores non-public names and any buy link that is not one of the two live URLs", () => {
     const env = {
+      LEMONSQUEEZY_CHECKOUT_URL: "https://store.lemonsqueezy.com/checkout/buy/six-live?enabled=2238798",
+      LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: "https://store.lemonsqueezy.com/checkout/buy/mo-live?enabled=2238873",
       NEXT_PUBLIC_CHECKOUT_URL: "https://store.lemonsqueezy.com/checkout/buy/six-alias",
+      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: "https://store.lemonsqueezy.com/checkout/buy/six-old?enabled=2238798",
+      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY:
+        "https://store.lemonsqueezy.com/checkout/buy/mo-old?enabled=2238873",
     };
-    expect(getPublicCheckoutUrl("sixMonth", env)).toBe(
-      "https://store.lemonsqueezy.com/checkout/buy/six-alias",
-    );
+    expect(getPublicCheckoutUrl("sixMonth", env)).toBe(LIVE_SIX);
     expect(getPublicCheckoutUrl("monthly", env)).toBe(LIVE_MONTHLY);
+    expect(getLemonPublicConfig(env)).toEqual({
+      sixMonthUrl: LIVE_SIX,
+      monthlyUrl: LIVE_MONTHLY,
+    });
   });
 
-  it("ignores the retired test URL and uses the live default", () => {
+  it("accepts the live URLs when set on the public env names", () => {
     const env = {
-      LEMONSQUEEZY_CHECKOUT_URL: `https://myinvoicemaker.lemonsqueezy.com/checkout/buy/${RETIRED_TEST_CHECKOUT_ID}`,
-      LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: "https://myinvoicemaker.lemonsqueezy.com/checkout/cart/test",
+      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL: ` ${LIVE_SIX} `,
+      NEXT_PUBLIC_LEMONSQUEEZY_CHECKOUT_URL_MONTHLY: LIVE_MONTHLY,
     };
     expect(getLemonPublicConfig(env)).toEqual({
       sixMonthUrl: LIVE_SIX,
@@ -80,16 +81,11 @@ describe("getPublicCheckoutUrl", () => {
     });
   });
 
-  it("lets LEMONSQUEEZY_CHECKOUT_URL override the default", () => {
-    vi.stubEnv("LEMONSQUEEZY_CHECKOUT_URL", "https://store.lemonsqueezy.com/checkout/buy/live");
-    vi.stubEnv(
-      "LEMONSQUEEZY_CHECKOUT_URL_MONTHLY",
-      "https://store.lemonsqueezy.com/checkout/buy/mo-live",
+  it("appends a percent-encoded install id as checkout custom data", () => {
+    const userId = "11111111-1111-4111-8111-111111111111";
+    expect(withCheckoutUserId(LIVE_MONTHLY, userId)).toBe(
+      `${LIVE_MONTHLY}&checkout[custom][user_id]=${encodeURIComponent(userId)}`,
     );
-    expect(getLemonPublicConfig()).toEqual({
-      sixMonthUrl: "https://store.lemonsqueezy.com/checkout/buy/live",
-      monthlyUrl: "https://store.lemonsqueezy.com/checkout/buy/mo-live",
-    });
   });
 });
 

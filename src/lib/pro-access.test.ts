@@ -1,28 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { addBillingPeriod, isStoredProActive, serializeProAccess } from "./pro-access";
+import { isStoredProActive } from "./pro-access";
 
 describe("device Pro access", () => {
-  const now = new Date("2026-01-15T00:00:00.000Z");
-
-  it("ends monthly access after one month and 6-month access after six months", () => {
-    expect(addBillingPeriod(now, "monthly")).toBe("2026-02-15T00:00:00.000Z");
-    expect(addBillingPeriod(now, "sixMonth")).toBe("2026-07-15T00:00:00.000Z");
-
-    const monthly = serializeProAccess({ plan: "monthly", expiresAt: addBillingPeriod(now, "monthly") });
-    expect(isStoredProActive(monthly, now)).toBe(true);
-    expect(isStoredProActive(monthly, new Date("2026-02-15T00:00:00.000Z"))).toBe(false);
-
-    const sixMonth = serializeProAccess({ plan: "sixMonth", expiresAt: addBillingPeriod(now, "sixMonth") });
-    expect(isStoredProActive(sixMonth, new Date("2026-07-14T23:00:00.000Z"))).toBe(true);
-    expect(isStoredProActive(sixMonth, new Date("2026-07-15T00:00:00.000Z"))).toBe(false);
+  it("honours the legacy flag only in development", () => {
+    expect(isStoredProActive("1", "development")).toBe(true);
+    expect(isStoredProActive("1", "production")).toBe(false);
+    expect(isStoredProActive("1", "test")).toBe(false);
   });
 
-  it("keeps the dev flag and drops inactive or corrupt records", () => {
-    expect(isStoredProActive("1", now)).toBe(true);
-    expect(isStoredProActive(null, now)).toBe(false);
-    expect(isStoredProActive("{", now)).toBe(false);
-    expect(isStoredProActive(JSON.stringify({ active: false, expiresAt: "2026-12-01T00:00:00.000Z" }), now)).toBe(
-      false,
-    );
+  it("does not treat a client-side expiry record as Pro", () => {
+    const forged = JSON.stringify({
+      v: 1,
+      active: true,
+      plan: "sixMonth",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    expect(isStoredProActive(forged, "development")).toBe(false);
+    expect(isStoredProActive(forged, "production")).toBe(false);
+    expect(isStoredProActive(null, "development")).toBe(false);
+    expect(isStoredProActive("{", "development")).toBe(false);
   });
 });

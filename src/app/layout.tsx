@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { EntitlementPoller } from "@/components/checkout/EntitlementPoller";
 import { LemonScript } from "@/components/LemonScript";
 import { ToastHost } from "@/components/ToastHost";
 import { PRICE_LABEL } from "@/lib/constants";
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full bg-bg font-sans text-text">
         <LemonScript />
+        <EntitlementPoller />
         {children}
         <ToastHost />
       </body>

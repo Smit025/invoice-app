@@ -1,13 +1,15 @@
 "use client";
 
-import { proPlanButtonLabel } from "@/lib/constants";
+import { proPlanButtonLabel, RENEWAL_TERMS } from "@/lib/constants";
 import { Button } from "@/components/ui/Button";
 import { useLemonCheckout } from "@/hooks/useLemonCheckout";
 
 export function CheckoutButtons({
   onContinueFree,
+  showTerms = true,
 }: {
   onContinueFree?: () => void;
+  showTerms?: boolean;
 }) {
   const { mode, ready, opening, openCheckout, demoUnlock } = useLemonCheckout();
 
@@ -84,9 +86,10 @@ export function CheckoutButtons({
           Continue free
         </Button>
       ) : null}
-      <p className="mt-1 text-center text-[11px] text-muted">
-        Secure checkout via Lemon Squeezy. Pro stays on this device until the subscription period ends.
-      </p>
+      {showTerms ? (
+        <p className="mt-1 text-center text-sm leading-5 text-muted">{RENEWAL_TERMS}</p>
+      ) : null}
+      <p className="text-center text-[11px] text-muted">Secure checkout via Lemon Squeezy.</p>
     </div>
   );
 }
