@@ -1,15 +1,17 @@
 "use client";
 
 import Script from "next/script";
-import { unlockProLocally } from "@/lib/pro";
+import { CHECKOUT_CONFIRMED_EVENT } from "@/lib/entitlement-client";
+import { markCheckoutStarted } from "@/lib/install-id";
 import { showToast } from "@/lib/toast";
 
 const LEMON_JS_SRC = "https://assets.lemonsqueezy.com/lemon.js";
 
 function handleLemonEvent(event: { event: string }): void {
   if (event.event !== "Checkout.Success") return;
-  unlockProLocally();
-  showToast("Pro unlocked. Watermark and logo limits are off on this device.");
+  markCheckoutStarted();
+  showToast("Payment received. Pro appears on this device after the subscription is confirmed.");
+  window.dispatchEvent(new Event(CHECKOUT_CONFIRMED_EVENT));
 }
 
 export function setupLemonJs(): void {

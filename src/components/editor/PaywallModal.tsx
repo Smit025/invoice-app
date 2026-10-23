@@ -1,10 +1,11 @@
 "use client";
 
-import { PRICING } from "@/lib/constants";
+import { PRICE_LABEL } from "@/lib/constants";
 import { sampleInvoice } from "@/lib/invoice";
 import { Modal } from "@/components/ui/Modal";
 import { InvoiceDocument } from "@/components/templates/InvoiceDocument";
 import { CheckoutButtons } from "@/components/checkout/CheckoutButtons";
+import { RecoveryNote } from "@/components/checkout/RecoveryNote";
 import { useInvoice } from "@/components/editor/InvoiceStore";
 
 const COPY: Record<string, { title: string; body: string }> = {
@@ -22,7 +23,7 @@ const COPY: Record<string, { title: string; body: string }> = {
   },
   pdf: {
     title: "Enjoying InvoiceMaker?",
-    body: `Pro removes the watermark and adds logo + draft history — $${PRICING.oneTime} once, or $${PRICING.monthly}/mo.`,
+    body: `Pro removes the watermark and adds logo + draft history. ${PRICE_LABEL.monthly} or ${PRICE_LABEL.sixMonth}.`,
   },
   pricing: {
     title: "Upgrade to Pro",
@@ -62,13 +63,14 @@ export function PaywallModal() {
       </div>
 
       <div className="mt-4 rounded-lg bg-surface p-3">
-        <p className="text-sm font-semibold">${PRICING.oneTime} one-time</p>
-        <p className="text-sm text-muted">or ${PRICING.monthly}/mo · USD</p>
+        <p className="text-sm font-semibold">Monthly — {PRICE_LABEL.monthly}</p>
+        <p className="text-sm text-muted">Every 6 months — {PRICE_LABEL.sixMonth}</p>
       </div>
 
       <div className="mt-4">
         <CheckoutButtons onContinueFree={closePaywall} />
       </div>
+      <RecoveryNote className="mt-3 text-sm leading-5 text-muted" />
     </Modal>
   );
 }

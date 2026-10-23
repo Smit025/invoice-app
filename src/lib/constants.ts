@@ -21,9 +21,22 @@ export const LOCALES: Array<{ code: "en-US" | "en-GB"; label: string }> = [
 export const GST_RATES = [0, 5, 12, 18, 28] as const;
 
 export const PRICING = {
-  oneTime: 7.99,
   monthly: 2.99,
+  sixMonth: 7.99,
 } as const;
+
+/** User-facing USD phrases. Keep these exact. */
+export const PRICE_LABEL = {
+  monthly: "$2.99/mo",
+  sixMonth: "$7.99 every 6 months",
+} as const;
+
+export function proPlanButtonLabel(plan: keyof typeof PRICE_LABEL): string {
+  return `Unlock Pro — ${PRICE_LABEL[plan]}`;
+}
+
+export const RENEWAL_TERMS =
+  "Renews automatically until cancelled. Cancel anytime from the link in your receipt email; Pro stays active until the end of the paid period.";
 
 export const TEMPLATES: Array<{
   id: "classic" | "minimal" | "bold";

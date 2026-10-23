@@ -1,0 +1,314 @@
+import type { CheckoutPlan } from "./lemon-config";
+import { entitlementKeyPrefix } from "./entitlement-keys";
+import type { PersistResult, WebhookSpec, WebhookState } from "./webhook-apply";
+import { applyWebhookState, bestForUser, deviceIds, eventPrecedence, putRecord } from "./webhook-apply";
+import { EVENT_TTL_SECONDS, WEBHOOK_LUA } from "./webhook-lua";
+
+export type EntitlementRecord = {
+  subscriptionId: string;
+  /** First device. Kept so a single-install record still reads as one user id. */
+  userId: string;
+  /** Install ids that may read this subscription. The webhook adds the first one only. */
+  devices?: string[];
+  plan: CheckoutPlan;
+  variantId: string;
+  status: string;
+  active: boolean;
+  endsAt: string | null;
+  renewsAt: string | null;
+  /** Lemon `updated_at` or `created_at`. Never the time the webhook was received. */
+  updatedAt: string;
+  updatedAtMs: number;
+  /** Set when a refund lands. Later active updates must not clear it. */
+  refunded?: boolean;
+  /** Tie-break rank stored with the winning event. See `eventPrecedence`. */
+  precedence?: number;
+  /** `meta.webhook_id` of the event that wrote this record. */
+  eventId?: string | null;
+  /**
+   * `endsAt` written by the refund. That value is the refund time. A later
+   * `payment_success` drops `endsAt` when it still equals this stamp.
+   */
+  refundEndsAt?: string | null;
+  /**
+   * Lemon time of the `payment_success` that cleared `refunded`. A grant at
+   * that same millisecond may still fill `renews_at` or `ends_at`.
+   */
+  refundClearedAtMs?: number | null;
+};
+
+export interface EntitlementStore {
+  getByUserId(userId: string): Promise<EntitlementRecord | null>;
+  getBySubscriptionId(subscriptionId: string): Promise<EntitlementRecord | null>;
+  save(record: EntitlementRecord): Promise<void>;
+  hasEvent(eventId: string): Promise<boolean>;
+  markEvent(eventId: string): Promise<void>;
+  applyWebhook(spec: WebhookSpec): Promise<PersistResult>;
+}
+
+export class EntitlementStoreNotConfiguredError extends Error {
+  constructor() {
+    super("Entitlement store is not configured");
+    this.name = "EntitlementStoreNotConfiguredError";
+  }
+}
+
+export class MemoryEntitlementStore implements EntitlementStore {
+  private readonly state: WebhookState = {
+    records: new Map(),
+    index: new Map(),
+    events: new Set(),
+    orders: new Map(),
+  };
+  private queue: Promise<unknown> = Promise.resolve();
+
+  private serialized<T>(work: () => T): Promise<T> {
+    const run = this.queue.then(() => work());
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  async getBySubscriptionId(subscriptionId: string): Promise<EntitlementRecord | null> {
+    return this.serialized(() => this.state.records.get(subscriptionId) ?? null);
+  }
+
+  async getByUserId(userId: string): Promise<EntitlementRecord | null> {
+    return this.serialized(() => bestForUser(this.state, userId, Date.now()));
+  }
+
+  async save(record: EntitlementRecord): Promise<void> {
+    await this.serialized(() => {
+      putRecord(this.state, record);
+    });
+  }
+
+  async hasEvent(eventId: string): Promise<boolean> {
+    return this.serialized(() => this.state.events.has(eventId));
+  }
+
+  async markEvent(eventId: string): Promise<void> {
+    await this.serialized(() => {
+      if (eventId) this.state.events.add(eventId);
+    });
+  }
+
+  async applyWebhook(spec: WebhookSpec): Promise<PersistResult> {
+    return this.serialized(() => applyWebhookState(this.state, spec));
+  }
+}
+
+type FetchLike = typeof fetch;
+
+/**
+ * Upstash Redis REST API. The free tier is enough: one key per subscription,
+ * one key per install id, and a short-lived key per webhook id.
+ */
+export class UpstashEntitlementStore implements EntitlementStore {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly token: string,
+    private readonly fetchImpl: FetchLike = fetch,
+    private readonly keyPrefix: string = entitlementKeyPrefix(),
+  ) {}
+
+  private async command<T>(args: string[]): Promise<T> {
+    const response = await this.fetchImpl(this.baseUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(args),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error("Entitlement store request failed");
+    }
+    const body = (await response.json()) as { result?: T; error?: string };
+    if (body.error) {
+      throw new Error("Entitlement store request failed");
+    }
+    return body.result as T;
+  }
+
+  private subKey(subscriptionId: string): string {
+    return `${this.keyPrefix}sub:${subscriptionId}`;
+  }
+
+  private userKey(userId: string): string {
+    return `${this.keyPrefix}user:${userId}`;
+  }
+
+  private eventKey(eventId: string): string {
+    return `${this.keyPrefix}event:${eventId}`;
+  }
+
+  private readJson<T>(raw: string | null): T | null {
+    if (!raw) return null;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed as T;
+    } catch {
+      return null;
+    }
+  }
+
+  private async readRecord(subscriptionId: string): Promise<EntitlementRecord | null> {
+    const parsed = this.readJson<EntitlementRecord>(
+      await this.command<string | null>(["GET", this.subKey(subscriptionId)]),
+    );
+    if (!parsed) return null;
+    return {
+      ...parsed,
+      endsAt: parsed.endsAt || null,
+      renewsAt: parsed.renewsAt || null,
+    };
+  }
+
+  async getBySubscriptionId(subscriptionId: string): Promise<EntitlementRecord | null> {
+    return this.readRecord(subscriptionId);
+  }
+
+  async getByUserId(userId: string): Promise<EntitlementRecord | null> {
+    const subscriptionId = await this.command<string | null>(["GET", this.userKey(userId)]);
+    if (!subscriptionId) return null;
+    const record = await this.readRecord(subscriptionId);
+    if (!record || !deviceIds(record).includes(userId)) return null;
+    return record;
+  }
+
+  async save(record: EntitlementRecord): Promise<void> {
+    const body = JSON.stringify(record);
+    await this.command(["SET", this.subKey(record.subscriptionId), body]);
+    for (const deviceId of deviceIds(record)) {
+      await this.command(["SET", this.userKey(deviceId), record.subscriptionId]);
+    }
+  }
+
+  async hasEvent(eventId: string): Promise<boolean> {
+    const value = await this.command<string | null>(["GET", this.eventKey(eventId)]);
+    return value !== null && value !== undefined;
+  }
+
+  async markEvent(eventId: string): Promise<void> {
+    if (!eventId) return;
+    await this.command(["SET", this.eventKey(eventId), "1", "EX", String(EVENT_TTL_SECONDS)]);
+  }
+
+  async applyWebhook(spec: WebhookSpec): Promise<PersistResult> {
+    const payload = JSON.stringify({
+      ...spec,
+      eventId: spec.eventId ?? "",
+      plan: spec.plan ?? "",
+      variantId: spec.variantId ?? "",
+      subjectId: spec.subjectId ?? "",
+      userId: spec.userId ?? "",
+      endsAt: spec.endsAt ?? "",
+      renewsAt: spec.renewsAt ?? "",
+      status: spec.status ?? "",
+      currency: spec.currency ?? "",
+      orderId: spec.orderId ?? "",
+      eventTime: spec.eventTime ?? "",
+      updatedAtMs: spec.updatedAtMs,
+      precedence: eventPrecedence(spec),
+    });
+    try {
+      const raw = await this.command<string>([
+        "EVAL",
+        WEBHOOK_LUA,
+        "1",
+        `${this.keyPrefix}hook`,
+        this.keyPrefix,
+        String(EVENT_TTL_SECONDS),
+        payload,
+      ]);
+      return parsePersistResult(raw);
+    } catch (error) {
+      if (spec.eventId) {
+        try {
+          await this.command(["DEL", this.eventKey(spec.eventId)]);
+        } catch {
+          /* Redis keeps the claim if the script already returned. This DEL runs only when the HTTP call failed. */
+        }
+      }
+      throw error;
+    }
+  }
+}
+
+function parsePersistResult(raw: unknown): PersistResult {
+  const value = typeof raw === "string" ? (JSON.parse(raw) as unknown) : raw;
+  if (!value || typeof value !== "object") throw new Error("Entitlement store request failed");
+  const body = value as { result?: string; action?: string; variantId?: string; reason?: string };
+  if (body.result !== "applied" && body.result !== "duplicate" && body.result !== "stale" && body.result !== "ignored") {
+    throw new Error("Entitlement store request failed");
+  }
+  const action = body.action;
+  if (
+    action !== "grant" &&
+    action !== "revoke" &&
+    action !== "pause" &&
+    action !== "no_extend" &&
+    action !== "ignore" &&
+    action !== "duplicate" &&
+    action !== "stale"
+  ) {
+    throw new Error("Entitlement store request failed");
+  }
+  return {
+    result: body.result,
+    action,
+    variantId: body.variantId ? body.variantId : null,
+    reason: body.reason ?? body.result,
+  };
+}
+
+const DEV_STORE_KEY = "__invoiceEntitlementMemory";
+let storeOverride: EntitlementStore | null = null;
+
+function devMemory(): MemoryEntitlementStore {
+  const globalRecord = globalThis as typeof globalThis & {
+    [DEV_STORE_KEY]?: MemoryEntitlementStore;
+  };
+  if (!globalRecord[DEV_STORE_KEY]) {
+    globalRecord[DEV_STORE_KEY] = new MemoryEntitlementStore();
+  }
+  return globalRecord[DEV_STORE_KEY];
+}
+
+export function setEntitlementStoreForTests(store: EntitlementStore | null): void {
+  storeOverride = store;
+}
+
+function restCredentials(env: Record<string, string | undefined>): { url: string; token: string } | null {
+  const url = (env.UPSTASH_REDIS_REST_URL ?? env.KV_REST_API_URL)?.trim();
+  const token = (env.UPSTASH_REDIS_REST_TOKEN ?? env.KV_REST_API_TOKEN)?.trim();
+  if (!url || !token) return null;
+  return { url: url.replace(/\/$/, ""), token };
+}
+
+export function getEntitlementStore(env: Record<string, string | undefined> = process.env): EntitlementStore {
+  if (storeOverride) return storeOverride;
+  const credentials = restCredentials(env);
+  const vercelEnv = env.VERCEL_ENV?.trim();
+  if (env.NODE_ENV === "production" && (!credentials || !vercelEnv)) {
+    throw new EntitlementStoreNotConfiguredError();
+  }
+  if (credentials) {
+    return new UpstashEntitlementStore(credentials.url, credentials.token, fetch, entitlementKeyPrefix(vercelEnv));
+  }
+  return devMemory();
+}
+
+/** Pro is on only while the stored Lemon period (`ends_at`, else `renews_at`) is still in the future. */
+export function recordIsActive(record: EntitlementRecord, now = new Date()): boolean {
+  if (!record.active) return false;
+  const until = record.endsAt ?? record.renewsAt;
+  if (!until) return false;
+  const time = Date.parse(until);
+  return !Number.isNaN(time) && time > now.getTime();
+}

@@ -1,13 +1,15 @@
 "use client";
 
-import { PRICING } from "@/lib/constants";
+import { proPlanButtonLabel, RENEWAL_TERMS } from "@/lib/constants";
 import { Button } from "@/components/ui/Button";
 import { useLemonCheckout } from "@/hooks/useLemonCheckout";
 
 export function CheckoutButtons({
   onContinueFree,
+  showTerms = true,
 }: {
   onContinueFree?: () => void;
+  showTerms?: boolean;
 }) {
   const { mode, ready, opening, openCheckout, demoUnlock } = useLemonCheckout();
 
@@ -43,7 +45,7 @@ export function CheckoutButtons({
   if (mode.fallback === "demo") {
     return (
       <div className="flex flex-col gap-2">
-        <Button onClick={demoUnlock}>Unlock Pro — ${PRICING.oneTime} (demo)</Button>
+        <Button onClick={demoUnlock}>Unlock Pro (demo)</Button>
         {onContinueFree ? (
           <Button variant="ghost" onClick={onContinueFree}>
             Continue free
@@ -58,28 +60,36 @@ export function CheckoutButtons({
 
   return (
     <div className="flex flex-col gap-2">
-      {mode.oneTimeEnabled ? (
-        <Button onClick={() => void openCheckout("onetime")} disabled={opening}>
-          {opening ? "Opening checkout…" : `Unlock Pro — $${PRICING.oneTime}`}
-        </Button>
-      ) : null}
-      {mode.monthlyEnabled ? (
-        <Button
-          variant={mode.oneTimeEnabled ? "secondary" : "primary"}
-          onClick={() => void openCheckout("monthly")}
-          disabled={opening}
-        >
-          {opening ? "Opening checkout…" : `Subscribe monthly — $${PRICING.monthly}`}
-        </Button>
-      ) : null}
+      <div className="grid grid-cols-2 gap-2">
+        {mode.monthlyEnabled ? (
+          <Button
+            className="!h-auto min-h-10 whitespace-normal px-2 py-2 text-center leading-5"
+            onClick={() => void openCheckout("monthly")}
+            disabled={opening}
+          >
+            {opening ? "Opening checkout…" : proPlanButtonLabel("monthly")}
+          </Button>
+        ) : null}
+        {mode.sixMonthEnabled ? (
+          <Button
+            variant={mode.monthlyEnabled ? "secondary" : "primary"}
+            className="!h-auto min-h-10 whitespace-normal px-2 py-2 text-center leading-5"
+            onClick={() => void openCheckout("sixMonth")}
+            disabled={opening}
+          >
+            {opening ? "Opening checkout…" : proPlanButtonLabel("sixMonth")}
+          </Button>
+        ) : null}
+      </div>
       {onContinueFree ? (
         <Button variant="ghost" onClick={onContinueFree}>
           Continue free
         </Button>
       ) : null}
-      <p className="mt-1 text-center text-[11px] text-muted">
-        Secure checkout via Lemon Squeezy. Pro unlocks on this device after payment.
-      </p>
+      {showTerms ? (
+        <p className="mt-1 text-center text-sm leading-5 text-muted">{RENEWAL_TERMS}</p>
+      ) : null}
+      <p className="text-center text-[11px] text-muted">Secure checkout via Lemon Squeezy.</p>
     </div>
   );
 }

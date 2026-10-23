@@ -1,4 +1,5 @@
 import { DRAFT_KEY, PRO_KEY } from "./constants";
+import { isStoredProActive } from "./pro-access";
 import { createDefaultInvoice, emptyAddress, emptyItem } from "./invoice";
 import { isAllowedLogoDataUrl } from "./logo";
 import { clampNonNegative, clampTaxRate } from "./tax";
@@ -156,7 +157,7 @@ export function writeDraftStore(store: DraftStore, isPro: boolean): void {
 
 export function readIsPro(): boolean {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(PRO_KEY) === "1";
+  return isStoredProActive(window.localStorage.getItem(PRO_KEY));
 }
 
 export function writeIsPro(value: boolean): void {

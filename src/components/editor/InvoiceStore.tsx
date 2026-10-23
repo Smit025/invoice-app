@@ -18,6 +18,7 @@ import {
   upsertDraft,
   writeDraftStore,
 } from "@/lib/storage";
+import { ENTITLEMENT_EVENT, readEntitlementSnapshot } from "@/lib/entitlement-client";
 import { PRO_UNLOCKED_EVENT, unlockProLocally } from "@/lib/pro";
 import type { DraftStore, Invoice, PaywallReason } from "@/lib/types";
 
@@ -75,12 +76,25 @@ export function InvoiceProvider({ children }: { children: React.ReactNode }) {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    const onUnlock = () => {
+    const applyServer = (event: Event) => {
+      const snapshot = readEntitlementSnapshot(event);
+      if (!snapshot) return;
+      const devGrant = process.env.NODE_ENV === "development" && readIsPro();
+      const active = devGrant || snapshot.status === "active";
+      setIsPro(active);
+      if (active) setPaywallOpen(false);
+    };
+    const onDemo = () => {
+      if (!readIsPro()) return;
       setIsPro(true);
       setPaywallOpen(false);
     };
-    window.addEventListener(PRO_UNLOCKED_EVENT, onUnlock);
-    return () => window.removeEventListener(PRO_UNLOCKED_EVENT, onUnlock);
+    window.addEventListener(ENTITLEMENT_EVENT, applyServer);
+    window.addEventListener(PRO_UNLOCKED_EVENT, onDemo);
+    return () => {
+      window.removeEventListener(ENTITLEMENT_EVENT, applyServer);
+      window.removeEventListener(PRO_UNLOCKED_EVENT, onDemo);
+    };
   }, []);
 
   const persist = useCallback(
