@@ -1,21 +1,30 @@
 import type { CheckoutPlan } from "./lemon-config";
-import type { PersistResult, StoredOrder, WebhookSpec, WebhookState } from "./webhook-apply";
-import { applyWebhookState, bestForUser, putRecord, rebindState } from "./webhook-apply";
-import { EVENT_TTL_SECONDS, REBIND_LUA, WEBHOOK_LUA } from "./webhook-lua";
+import { entitlementKeyPrefix } from "./entitlement-keys";
+import type { PersistResult, WebhookSpec, WebhookState } from "./webhook-apply";
+import { applyWebhookState, bestForUser, deviceIds, eventPrecedence, putRecord } from "./webhook-apply";
+import { EVENT_TTL_SECONDS, WEBHOOK_LUA } from "./webhook-lua";
 
 export type EntitlementRecord = {
   subscriptionId: string;
+  /** First device. Kept so a single-install record still reads as one user id. */
   userId: string;
+  /** Install ids that may read this subscription. The webhook adds the first one only. */
+  devices?: string[];
   plan: CheckoutPlan;
   variantId: string;
   status: string;
   active: boolean;
   endsAt: string | null;
   renewsAt: string | null;
+  /** Lemon `updated_at` or `created_at`. Never the time the webhook was received. */
   updatedAt: string;
   updatedAtMs: number;
   /** Set when a refund lands. Later active updates must not clear it. */
   refunded?: boolean;
+  /** Tie-break rank stored with the winning event. See `eventPrecedence`. */
+  precedence?: number;
+  /** `meta.webhook_id` of the event that wrote this record. */
+  eventId?: string | null;
 };
 
 export interface EntitlementStore {
@@ -25,8 +34,6 @@ export interface EntitlementStore {
   hasEvent(eventId: string): Promise<boolean>;
   markEvent(eventId: string): Promise<void>;
   applyWebhook(spec: WebhookSpec): Promise<PersistResult>;
-  rebindInstall(record: EntitlementRecord): Promise<"applied" | "refunded">;
-  getOrder(orderId: string): Promise<StoredOrder | null>;
 }
 
 export class EntitlementStoreNotConfiguredError extends Error {
@@ -81,14 +88,6 @@ export class MemoryEntitlementStore implements EntitlementStore {
   async applyWebhook(spec: WebhookSpec): Promise<PersistResult> {
     return this.serialized(() => applyWebhookState(this.state, spec));
   }
-
-  async rebindInstall(record: EntitlementRecord): Promise<"applied" | "refunded"> {
-    return this.serialized(() => rebindState(this.state, record));
-  }
-
-  async getOrder(orderId: string): Promise<StoredOrder | null> {
-    return this.serialized(() => this.state.orders.get(orderId) ?? null);
-  }
 }
 
 type FetchLike = typeof fetch;
@@ -102,6 +101,7 @@ export class UpstashEntitlementStore implements EntitlementStore {
     private readonly baseUrl: string,
     private readonly token: string,
     private readonly fetchImpl: FetchLike = fetch,
+    private readonly keyPrefix: string = entitlementKeyPrefix(),
   ) {}
 
   private async command<T>(args: string[]): Promise<T> {
@@ -125,15 +125,15 @@ export class UpstashEntitlementStore implements EntitlementStore {
   }
 
   private subKey(subscriptionId: string): string {
-    return `inv:sub:${subscriptionId}`;
+    return `${this.keyPrefix}sub:${subscriptionId}`;
   }
 
   private userKey(userId: string): string {
-    return `inv:user:${userId}`;
+    return `${this.keyPrefix}user:${userId}`;
   }
 
   private eventKey(eventId: string): string {
-    return `inv:event:${eventId}`;
+    return `${this.keyPrefix}event:${eventId}`;
   }
 
   private readJson<T>(raw: string | null): T | null {
@@ -167,14 +167,16 @@ export class UpstashEntitlementStore implements EntitlementStore {
     const subscriptionId = await this.command<string | null>(["GET", this.userKey(userId)]);
     if (!subscriptionId) return null;
     const record = await this.readRecord(subscriptionId);
-    if (!record || record.userId !== userId) return null;
+    if (!record || !deviceIds(record).includes(userId)) return null;
     return record;
   }
 
   async save(record: EntitlementRecord): Promise<void> {
     const body = JSON.stringify(record);
     await this.command(["SET", this.subKey(record.subscriptionId), body]);
-    await this.command(["SET", this.userKey(record.userId), record.subscriptionId]);
+    for (const deviceId of deviceIds(record)) {
+      await this.command(["SET", this.userKey(deviceId), record.subscriptionId]);
+    }
   }
 
   async hasEvent(eventId: string): Promise<boolean> {
@@ -200,39 +202,31 @@ export class UpstashEntitlementStore implements EntitlementStore {
       status: spec.status ?? "",
       currency: spec.currency ?? "",
       orderId: spec.orderId ?? "",
-      emailHash: spec.emailHash ?? "",
       eventTime: spec.eventTime ?? "",
+      updatedAtMs: spec.updatedAtMs,
+      precedence: eventPrecedence(spec),
     });
     try {
-      const raw = await this.command<string>(["EVAL", WEBHOOK_LUA, "1", "inv:webhook", String(EVENT_TTL_SECONDS), payload]);
+      const raw = await this.command<string>([
+        "EVAL",
+        WEBHOOK_LUA,
+        "1",
+        `${this.keyPrefix}hook`,
+        this.keyPrefix,
+        String(EVENT_TTL_SECONDS),
+        payload,
+      ]);
       return parsePersistResult(raw);
     } catch (error) {
       if (spec.eventId) {
         try {
           await this.command(["DEL", this.eventKey(spec.eventId)]);
         } catch {
-          /* The claim rolls back with a failed EVAL. A lost response can still retry. */
+          /* Redis keeps the claim if the script already returned. This DEL runs only when the HTTP call failed. */
         }
       }
       throw error;
     }
-  }
-
-  async rebindInstall(record: EntitlementRecord): Promise<"applied" | "refunded"> {
-    const raw = await this.command<string>([
-      "EVAL",
-      REBIND_LUA,
-      "1",
-      "inv:webhook",
-      JSON.stringify({ ...record, nowMs: Date.now(), endsAt: record.endsAt ?? "", renewsAt: record.renewsAt ?? "" }),
-    ]);
-    const parsed = typeof raw === "string" ? (JSON.parse(raw) as { result?: string }) : (raw as { result?: string });
-    return parsed.result === "refunded" ? "refunded" : "applied";
-  }
-
-  async getOrder(orderId: string): Promise<StoredOrder | null> {
-    if (!/^[A-Za-z0-9_-]{1,64}$/.test(orderId)) return null;
-    return this.readJson<StoredOrder>(await this.command<string | null>(["GET", `inv:order:${orderId}`]));
   }
 }
 
@@ -290,7 +284,9 @@ function restCredentials(env: Record<string, string | undefined>): { url: string
 export function getEntitlementStore(env: Record<string, string | undefined> = process.env): EntitlementStore {
   if (storeOverride) return storeOverride;
   const credentials = restCredentials(env);
-  if (credentials) return new UpstashEntitlementStore(credentials.url, credentials.token);
+  if (credentials) {
+    return new UpstashEntitlementStore(credentials.url, credentials.token, fetch, entitlementKeyPrefix(env.VERCEL_ENV));
+  }
   if (env.NODE_ENV === "production") throw new EntitlementStoreNotConfiguredError();
   return devMemory();
 }

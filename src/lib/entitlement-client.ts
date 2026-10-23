@@ -1,4 +1,4 @@
-import { hasCheckoutStarted } from "./install-id";
+import { hasCheckoutStarted, noteCheckoutEntitlement } from "./install-id";
 
 export const ENTITLEMENT_EVENT = "invoice-entitlement";
 export const CHECKOUT_CONFIRMED_EVENT = "invoice-checkout-confirmed";
@@ -82,7 +82,8 @@ export function cachedActiveDuringOutage(now = Date.now()): EntitlementSnapshot 
 
 export function shouldQueryEntitlement(input: { fresh: boolean; fast: boolean }): boolean {
   const cached = readCachedEntitlement();
-  if (!hasCheckoutStarted() && !cached) return false;
+  const remembered = cached !== null && cached.snapshot.status !== "not_found";
+  if (!hasCheckoutStarted() && !remembered) return false;
   if (input.fast || input.fresh) return true;
   if (!cached) return true;
   return Date.now() - cached.fetchedAt >= ENTITLEMENT_TTL_MS;
@@ -112,6 +113,7 @@ export async function fetchEntitlement(
       renewsAt: typeof record.renewsAt === "string" ? record.renewsAt : null,
     };
     writeCachedEntitlement(snapshot);
+    noteCheckoutEntitlement(status);
     return snapshot;
   } catch {
     return cachedActiveDuringOutage();

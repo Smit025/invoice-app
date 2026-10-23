@@ -223,4 +223,164 @@ describe("atomic entitlement updates", () => {
     expect(missing).toMatchObject({ result: "ignored", reason: "unknown_variant" });
     expect(await store.getBySubscriptionId("sub_missing")).toBeNull();
   });
+
+  it("lets a refund win an equal updated_at, in either order", async () => {
+    const grant = subscription({
+      webhookId: "evt-grant",
+      updatedAt: "2026-10-02T00:00:00.000Z",
+      renewsAt: "2026-12-01T00:00:00.000Z",
+      status: "active",
+    });
+    const refund = subscription({
+      event: "subscription_payment_refunded",
+      webhookId: "evt-refund",
+      updatedAt: "2026-10-02T00:00:00.000Z",
+      status: "refunded",
+      renewsAt: null,
+      endsAt: "2026-10-02T00:00:00.000Z",
+    });
+
+    for (const order of [
+      [grant, refund],
+      [refund, grant],
+    ]) {
+      const store = new MemoryEntitlementStore();
+      for (const payload of order) {
+        await persistLemonWebhook(payload, store, { storeId: STORE, now: NOW });
+      }
+      expect(await store.getBySubscriptionId("sub_race")).toMatchObject({
+        active: false,
+        refunded: true,
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        eventId: "evt-refund",
+      });
+    }
+  });
+
+  it("breaks a remaining tie with the greater webhook id", async () => {
+    const store = new MemoryEntitlementStore();
+    await persistLemonWebhook(
+      subscription({
+        webhookId: "evt-2",
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        renewsAt: "2026-12-01T00:00:00.000Z",
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    await persistLemonWebhook(
+      subscription({
+        webhookId: "evt-1",
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        renewsAt: "2027-01-01T00:00:00.000Z",
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    expect(await store.getBySubscriptionId("sub_race")).toMatchObject({
+      renewsAt: "2026-12-01T00:00:00.000Z",
+      eventId: "evt-2",
+    });
+  });
+
+  it("keeps the first device when a later event names a different install id", async () => {
+    const store = new MemoryEntitlementStore();
+    const other = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    await persistLemonWebhook(
+      subscription({
+        webhookId: "evt-owner",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+        renewsAt: "2026-11-01T00:00:00.000Z",
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    await persistLemonWebhook(
+      subscription({
+        webhookId: "evt-other",
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        renewsAt: "2026-12-01T00:00:00.000Z",
+        userId: other,
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    expect(await store.getBySubscriptionId("sub_race")).toMatchObject({
+      userId: USER,
+      devices: [USER],
+      renewsAt: "2026-12-01T00:00:00.000Z",
+      updatedAt: "2026-10-02T00:00:00.000Z",
+    });
+    expect(await store.getByUserId(other)).toBeNull();
+    expect(await store.getByUserId(USER)).toMatchObject({ renewsAt: "2026-12-01T00:00:00.000Z" });
+  });
+
+  it("does not stamp updated_at from the request clock when Lemon omits it", async () => {
+    const store = new MemoryEntitlementStore();
+    const payload = subscription({
+      webhookId: "evt-notime",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    });
+    delete (payload.data.attributes as { updated_at?: string }).updated_at;
+    await persistLemonWebhook(payload, store, { storeId: STORE, now: NOW });
+    const record = await store.getBySubscriptionId("sub_race");
+    expect(record?.updatedAtMs).toBe(0);
+    expect(record?.updatedAt).toBe("");
+    expect(record?.updatedAtMs).not.toBe(NOW.getTime());
+  });
+
+  it("refunds the subscription mapped from the order id and leaves a later purchase active", async () => {
+    const store = new MemoryEntitlementStore();
+    await persistLemonWebhook(
+      subscription({
+        id: "sub_old",
+        webhookId: "evt-old",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+        orderId: "4242",
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    await persistLemonWebhook(
+      subscription({
+        id: "sub_live",
+        webhookId: "evt-live",
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        renewsAt: "2027-06-01T00:00:00.000Z",
+      }),
+      store,
+      { storeId: STORE, now: NOW },
+    );
+
+    const unmapped = await persistLemonWebhook(
+      {
+        meta: { event_name: "order_refunded", webhook_id: "evt-unknown-order", custom_data: { user_id: USER } },
+        data: {
+          type: "orders",
+          id: "9999",
+          attributes: { store_id: Number(STORE), status: "refunded", updated_at: "2026-10-03T00:00:00.000Z" },
+        },
+      },
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    expect(unmapped).toMatchObject({ result: "ignored", reason: "missing_subscription" });
+    expect(await store.getBySubscriptionId("sub_live")).toMatchObject({ active: true });
+
+    const refunded = await persistLemonWebhook(
+      {
+        meta: { event_name: "order_refunded", webhook_id: "evt-order-refund", custom_data: { user_id: USER } },
+        data: {
+          type: "orders",
+          id: "4242",
+          attributes: { store_id: Number(STORE), status: "refunded", updated_at: "2026-10-03T00:00:00.000Z" },
+        },
+      },
+      store,
+      { storeId: STORE, now: NOW },
+    );
+    expect(refunded).toMatchObject({ result: "applied", reason: "refunded" });
+    expect(await store.getBySubscriptionId("sub_old")).toMatchObject({ active: false, refunded: true });
+    expect(await store.getByUserId(USER)).toMatchObject({ subscriptionId: "sub_live", active: true });
+  });
 });

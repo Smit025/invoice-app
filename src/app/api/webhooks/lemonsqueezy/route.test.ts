@@ -441,6 +441,48 @@ describe("POST /api/webhooks/lemonsqueezy", () => {
     expect(await store.getBySubscriptionId("sub_order")).toMatchObject({ active: false });
   });
 
+  it("maps an order refund by order id and does not revoke a different subscription", async () => {
+    const renewsAt = future(20);
+    await post(
+      payload({
+        event: "subscription_created",
+        webhookId: "wh-mapped-create",
+        id: "sub_mapped",
+        attributes: { order_id: 4242, renews_at: renewsAt, updated_at: past(3) },
+      }),
+    );
+    await post(
+      payload({
+        event: "subscription_created",
+        webhookId: "wh-other-create",
+        id: "sub_other",
+        attributes: { renews_at: renewsAt, updated_at: past(2) },
+      }),
+    );
+    const unknown = JSON.stringify({
+      meta: { event_name: "order_refunded", webhook_id: "wh-unknown-order", custom_data: { user_id: USER_A } },
+      data: {
+        type: "orders",
+        id: "9999",
+        attributes: { store_id: Number(STORE_ID), status: "refunded", updated_at: new Date().toISOString() },
+      },
+    });
+    await post(unknown);
+    expect(await store.getBySubscriptionId("sub_other")).toMatchObject({ active: true });
+
+    const mapped = JSON.stringify({
+      meta: { event_name: "order_refunded", webhook_id: "wh-mapped-order", custom_data: { user_id: USER_A } },
+      data: {
+        type: "orders",
+        id: "4242",
+        attributes: { store_id: Number(STORE_ID), status: "refunded", updated_at: new Date().toISOString() },
+      },
+    });
+    await post(mapped);
+    expect(await store.getBySubscriptionId("sub_mapped")).toMatchObject({ active: false, refunded: true });
+    expect(await store.getByUserId(USER_A)).toMatchObject({ subscriptionId: "sub_other", active: true });
+  });
+
   it("accepts test_mode only when VERCEL_ENV is preview", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("VERCEL_ENV", "production");

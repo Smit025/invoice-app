@@ -1,5 +1,4 @@
 import type { EntitlementStore } from "./entitlement-store";
-import { hashEmail } from "./email-hash";
 import {
   readOrderBinding,
   readPriceEvidence,
@@ -39,7 +38,7 @@ function toSpec(payload: unknown, decision: LemonLicenseDecision, now: Date): We
     userId: decision.userId,
     endsAt: decision.endsAt,
     renewsAt: decision.renewsAt,
-    updatedAtMs: Number.isNaN(eventMs) ? now.getTime() : eventMs,
+    updatedAtMs: Number.isNaN(eventMs) ? null : eventMs,
     nowMs: now.getTime(),
     nowIso: now.toISOString(),
     status: decision.status,
@@ -49,7 +48,6 @@ function toSpec(payload: unknown, decision: LemonLicenseDecision, now: Date): We
     amounts: evidence.amounts,
     reuseStoredPlan: decision.reason === "payment_success" || decision.action !== "grant",
     orderId: binding.orderId,
-    emailHash: binding.email ? hashEmail(binding.email) : null,
     eventTime: decision.eventTime,
   };
 }

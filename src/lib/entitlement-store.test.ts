@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { entitlementKeyPrefix } from "./entitlement-keys";
 import {
   getEntitlementStore,
   MemoryEntitlementStore,
@@ -49,10 +50,10 @@ describe("entitlement store", () => {
       const args = JSON.parse(String(init?.body)) as string[];
       calls.push(args);
       const [command, key] = args;
-      if (command === "GET" && key === "inv:user:11111111-1111-4111-8111-111111111111") {
+      if (command === "GET" && key === "inv:local:user:11111111-1111-4111-8111-111111111111") {
         return { ok: true, json: async () => ({ result: "sub_1" }) };
       }
-      if (command === "GET" && key === "inv:sub:sub_1") {
+      if (command === "GET" && key === "inv:local:sub:sub_1") {
         return { ok: true, json: async () => ({ result: saved }) };
       }
       if (command === "GET") {
@@ -61,7 +62,12 @@ describe("entitlement store", () => {
       return { ok: true, json: async () => ({ result: "OK" }) };
     });
 
-    const store = new UpstashEntitlementStore("https://example.upstash.io", "token", fetchImpl as unknown as typeof fetch);
+    const store = new UpstashEntitlementStore(
+      "https://example.upstash.io",
+      "token",
+      fetchImpl as unknown as typeof fetch,
+      "inv:local:",
+    );
     expect((await store.getByUserId(record.userId))?.plan).toBe("monthly");
     expect(await store.getByUserId("22222222-2222-4222-8222-222222222222")).toBeNull();
     await store.save(record);
@@ -69,13 +75,13 @@ describe("entitlement store", () => {
     await store.markEvent("wh_1");
 
     expect(calls).toEqual([
-      ["GET", "inv:user:11111111-1111-4111-8111-111111111111"],
-      ["GET", "inv:sub:sub_1"],
-      ["GET", "inv:user:22222222-2222-4222-8222-222222222222"],
-      ["SET", "inv:sub:sub_1", saved],
-      ["SET", "inv:user:11111111-1111-4111-8111-111111111111", "sub_1"],
-      ["GET", "inv:event:wh_1"],
-      ["SET", "inv:event:wh_1", "1", "EX", String(60 * 60 * 24 * 45)],
+      ["GET", "inv:local:user:11111111-1111-4111-8111-111111111111"],
+      ["GET", "inv:local:sub:sub_1"],
+      ["GET", "inv:local:user:22222222-2222-4222-8222-222222222222"],
+      ["SET", "inv:local:sub:sub_1", saved],
+      ["SET", "inv:local:user:11111111-1111-4111-8111-111111111111", "sub_1"],
+      ["GET", "inv:local:event:wh_1"],
+      ["SET", "inv:local:event:wh_1", "1", "EX", String(60 * 60 * 24 * 45)],
     ]);
     expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
       headers: { Authorization: "Bearer token" },
@@ -97,7 +103,12 @@ describe("entitlement store", () => {
         }),
       };
     });
-    const store = new UpstashEntitlementStore("https://example.upstash.io", "token", fetchImpl as unknown as typeof fetch);
+    const store = new UpstashEntitlementStore(
+      "https://example.upstash.io",
+      "token",
+      fetchImpl as unknown as typeof fetch,
+      "inv:local:",
+    );
     const spec = {
       eventId: "wh_1",
       action: "grant" as const,
@@ -118,19 +129,31 @@ describe("entitlement store", () => {
       amounts: [299],
       reuseStoredPlan: false,
       orderId: null,
-      emailHash: null,
       eventTime: record.updatedAt,
     };
     await expect(store.applyWebhook(spec)).rejects.toThrow(/failed/);
     expect(calls[0]?.[0]).toBe("EVAL");
     expect(calls[0]?.[1]).toContain("NX");
     expect(calls[0]?.[1]).toContain("updatedAtMs");
-    expect(calls[0]?.[1]).toContain("inv:sub:");
-    expect(calls[0]?.[1]).toContain("inv:user:");
-    expect(calls[1]).toEqual(["DEL", "inv:event:wh_1"]);
+    expect(calls[0]?.[1]).toContain('prefix .. "sub:"');
+    expect(calls[0]?.[1]).toContain('prefix .. "user:"');
+    expect(calls[0]?.[1]).toContain("does not roll back");
+    expect(calls[0]?.[1]).not.toContain("spec.nowIso");
+    expect(calls[0]?.[1]).not.toContain("or nowMs");
+    expect(calls[0]?.[3]).toBe("inv:local:hook");
+    expect(calls[0]?.[4]).toBe("inv:local:");
+    expect(calls[1]).toEqual(["DEL", "inv:local:event:wh_1"]);
 
     await expect(store.applyWebhook({ ...spec, eventId: "wh_2" })).resolves.toMatchObject({ result: "applied" });
     expect(calls.filter((call) => call[0] === "EVAL")).toHaveLength(2);
+  });
+
+  it("namespaces Redis keys by VERCEL_ENV", () => {
+    expect(entitlementKeyPrefix(undefined)).toBe("inv:local:");
+    expect(entitlementKeyPrefix("")).toBe("inv:local:");
+    expect(entitlementKeyPrefix("preview")).toBe("inv:preview:");
+    expect(entitlementKeyPrefix("Production")).toBe("inv:production:");
+    expect(entitlementKeyPrefix("pre view!")).toBe("inv:preview:");
   });
 
   it("refuses to run in production without Redis credentials", () => {

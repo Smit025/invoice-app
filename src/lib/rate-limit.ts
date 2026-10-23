@@ -28,6 +28,3 @@ export const ENTITLEMENT_ID_LIMIT = 48;
 export const ENTITLEMENT_ID_WINDOW_MS = 3 * 60 * 1000;
 export const ENTITLEMENT_IP_LIMIT = 120;
 export const ENTITLEMENT_IP_WINDOW_MS = 60 * 1000;
-
-export const RESTORE_LIMIT = 8;
-export const RESTORE_WINDOW_MS = 60 * 60 * 1000;

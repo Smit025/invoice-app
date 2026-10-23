@@ -4,8 +4,9 @@ import {
   ENTITLEMENT_CACHE_KEY,
   ENTITLEMENT_GRACE_MS,
   fetchEntitlement,
+  shouldQueryEntitlement,
 } from "./entitlement-client";
-import { CHECKOUT_STARTED_KEY } from "./install-id";
+import { CHECKOUT_STARTED_KEY, clearCheckoutStarted, hasCheckoutStarted, markCheckoutStarted } from "./install-id";
 
 const USER = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -27,6 +28,8 @@ function storage() {
 
 describe("entitlement client fail-safe", () => {
   afterEach(() => {
+    clearCheckoutStarted();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -80,5 +83,28 @@ describe("entitlement client fail-safe", () => {
     const snapshot = await fetchEntitlement(USER, { fresh: true });
     expect(snapshot?.status).toBe("active");
     expect(JSON.parse(map.get(ENTITLEMENT_CACHE_KEY) ?? "{}").snapshot.status).toBe("active");
+  });
+
+  it("stops polling after a day of not_found and ignores a not_found cache alone", async () => {
+    storage();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    markCheckoutStarted();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ status: "not_found" }), { status: 200 })),
+    );
+
+    expect(await fetchEntitlement(USER, { fresh: true })).toMatchObject({ status: "not_found" });
+    expect(hasCheckoutStarted()).toBe(true);
+    clearCheckoutStarted();
+    expect(shouldQueryEntitlement({ fresh: true, fast: false })).toBe(false);
+
+    markCheckoutStarted();
+    expect(await fetchEntitlement(USER, { fresh: true })).toMatchObject({ status: "not_found" });
+    vi.setSystemTime(new Date("2026-01-02T00:00:00.000Z"));
+    expect(await fetchEntitlement(USER, { fresh: true })).toMatchObject({ status: "not_found" });
+    expect(hasCheckoutStarted()).toBe(false);
+    expect(shouldQueryEntitlement({ fresh: true, fast: false })).toBe(false);
   });
 });
